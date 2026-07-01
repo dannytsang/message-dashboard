@@ -21,8 +21,8 @@
   --shadow: 0 4px 24px rgba(0, 0, 0, 0.4);
 
   /* ── Shared responsive layout tokens ── */
-  /* Content max-width: 1440px desktop, fluid below that, 100% on mobile */
-  --width-content: min(1440px, 100% - var(--gutter) * 2);
+  /* Content max-width: 2200px desktop, fluid below that, 100% on mobile */
+  --width-content: min(2200px, 100% - var(--gutter) * 2);
   /* Gutter: 24px base, grows to 48px on large screens */
   --gutter: clamp(16px, 4vw, 48px);
   /* Spacing scale using clamp for viewport-aware growth */
