@@ -1,4 +1,11 @@
 // Shared skeleton fixture data — entirely fictional, no real messages/contacts/JIDs
+//
+// NOTE: emailFixtures is kept as a minimal type-level stub for the /
+// summary page only. The /emails inbox list uses lib/email-fixtures.ts
+// with its own separate fictional fixture set.
+//
+// Do NOT commit real email subjects, real mailbox labels, OAuth tokens,
+// Gmail message/thread IDs, or any private communication content.
 
 export type MessageStatus = "open" | "reminded" | "review-needed" | "draft" | "resolved";
 
@@ -13,10 +20,15 @@ export interface WhatsAppMessage {
   conversation: string;
 }
 
+/**
+ * Minimal email stub for the / summary page only.
+ * Inbox-specific fields (receivedDateTime, labels, identifiedAction)
+ * live in lib/email-fixtures.ts instead.
+ */
 export interface EmailMessage {
   id: string;
   from: string;
-  fromAddress: string; // fictional
+  fromAddress: string;
   subject: string;
   snippet: string;
   timestamp: string;
@@ -25,6 +37,8 @@ export interface EmailMessage {
   status: MessageStatus;
   labels: string[];
 }
+
+// ── WhatsApp fixtures (unchanged — WhatsApp is not in scope for spec 009) ──
 
 export const whatsappFixtures: WhatsAppMessage[] = [
   {
@@ -79,66 +93,24 @@ export const whatsappFixtures: WhatsAppMessage[] = [
   },
 ];
 
+/**
+ * Minimal email stub — intentionally sparse so the / summary page
+ * continues to render without regression.
+ * Real inbox data must arrive through the server-side dashboard
+ * data boundary (spec 001 / 007 / 008), not through this fixture.
+ */
 export const emailFixtures: EmailMessage[] = [
   {
-    id: "em-001",
-    from: "Infrastructure Team",
-    fromAddress: "infra@example.com",
-    subject: "Weekly infrastructure health summary",
-    snippet: "All systems nominal. No incidents reported this week.",
-    timestamp: "2026-06-30T07:00:00Z",
+    id: "stub-001",
+    from: "—",
+    fromAddress: "no-reply@example",
+    subject: "Inbox items loading…",
+    snippet: "Your email inbox will appear here once connected.",
+    timestamp: new Date().toISOString(),
     relativeLabel: "Today",
-    dateLabel: "30 Jun 2026",
-    status: "resolved",
-    labels: ["infrastructure", "automated"],
-  },
-  {
-    id: "em-002",
-    from: "Casey Nguyen",
-    fromAddress: "casey.nguyen@example.com",
-    subject: "Re: API integration question",
-    snippet: "Thanks for the clarification — I'll update the docs accordingly.",
-    timestamp: "2026-06-29T15:22:00Z",
-    relativeLabel: "Yesterday",
-    dateLabel: "29 Jun 2026",
-    status: "resolved",
-    labels: ["work", "external"],
-  },
-  {
-    id: "em-003",
-    from: "DevOps Bot",
-    fromAddress: "devops-bot@example.com",
-    subject: "Deployment succeeded: message-dashboard@2.1.0",
-    snippet: "Build completed in 94 s. Preview: https://preview.example.com/deploy/abc123",
-    timestamp: "2026-06-29T12:10:00Z",
-    relativeLabel: "Yesterday",
-    dateLabel: "29 Jun 2026",
+    dateLabel: new Date().toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" }),
     status: "open",
-    labels: ["devops", "automated", "deployment"],
-  },
-  {
-    id: "em-004",
-    from: "Drew Hassan",
-    fromAddress: "drew.hassan@example.com",
-    subject: "Q3 roadmap review — action items",
-    snippet: "Please review the attached and flag anything that needs re-prioritisation.",
-    timestamp: "2026-06-28T09:55:00Z",
-    relativeLabel: "2 days ago",
-    dateLabel: "28 Jun 2026",
-    status: "review-needed",
-    labels: ["work", "roadmap"],
-  },
-  {
-    id: "em-005",
-    from: "Newsletter",
-    fromAddress: "newsletter@techdigest.example.com",
-    subject: "Tech Digest — Issue #241",
-    snippet: "This week: new messaging protocols, edge computing updates, and more.",
-    timestamp: "2026-06-27T08:00:00Z",
-    relativeLabel: "3 days ago",
-    dateLabel: "27 Jun 2026",
-    status: "draft",
-    labels: ["newsletter"],
+    labels: ["inbox"],
   },
 ];
 
