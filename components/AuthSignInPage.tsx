@@ -81,7 +81,7 @@ export default function AuthSignInPage({
             lineHeight: 1.6,
           }}
         >
-          This dashboard is private by default and only renders its communication views after a successful Authentik OIDC session.
+          Access the private communications dashboard to review email and WhatsApp activity, follow-ups, and items that need attention.
         </p>
 
         {(errorMessage || configurationError) && (
@@ -122,19 +122,8 @@ export default function AuthSignInPage({
             padding: "0.95rem 1rem",
           }}
         >
-          {authConfigured ? "Sign in with Authentik" : "Waiting for auth configuration"}
+          {authConfigured ? "Continue" : "Waiting for auth configuration"}
         </button>
-
-        <p
-          style={{
-            margin: "1rem 0 0",
-            color: "var(--color-text-muted)",
-            fontSize: "0.84rem",
-            lineHeight: 1.5,
-          }}
-        >
-          Callback destination: <code>{callbackUrl}</code>
-        </p>
       </section>
     </main>
   );
