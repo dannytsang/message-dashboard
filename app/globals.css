@@ -19,6 +19,18 @@
   --color-text-muted: #64748b;
   --radius: 10px;
   --shadow: 0 4px 24px rgba(0, 0, 0, 0.4);
+
+  /* ── Shared responsive layout tokens ── */
+  /* Content max-width: 1440px desktop, fluid below that, 100% on mobile */
+  --width-content: min(1440px, 100% - var(--gutter) * 2);
+  /* Gutter: 24px base, grows to 48px on large screens */
+  --gutter: clamp(16px, 4vw, 48px);
+  /* Spacing scale using clamp for viewport-aware growth */
+  --space-xs:  clamp(8px,  1.5vw, 16px);
+  --space-sm:  clamp(12px, 2vw,  24px);
+  --space-md:  clamp(16px, 3vw,  32px);
+  --space-lg:  clamp(24px, 4vw,  48px);
+  --space-xl:  clamp(32px, 5vw,  64px);
 }
 
 /* Light theme — applied via data-theme="light" on <html> */
