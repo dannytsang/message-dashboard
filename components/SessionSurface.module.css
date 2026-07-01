@@ -1,0 +1,65 @@
+/* ── Session surface (session-user) ──────────────────────────────────────── */
+
+.surface {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+
+/* ── Trigger button ─────────────────────────────────────────────────────── */
+
+.trigger {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 10px;
+  border-radius: 6px;
+  background: transparent;
+  border: 1px solid transparent;
+  font-size: 0.875rem;
+  font-weight: 500;
+  color: var(--color-text-secondary);
+  cursor: pointer;
+  transition: color 0.12s, background 0.12s, border-color 0.12s;
+  white-space: nowrap;
+}
+
+.trigger:hover {
+  color: var(--color-text-primary);
+  background: var(--color-accent-dim);
+  border-color: var(--color-border);
+}
+
+.trigger:focus-visible {
+  outline: 2px solid var(--color-accent);
+  outline-offset: 2px;
+}
+
+.trigger[aria-expanded="true"] {
+  color: var(--color-text-primary);
+  background: var(--color-accent-dim);
+  border-color: var(--color-border);
+}
+
+/* ── Display label ─────────────────────────────────────────────────────── */
+
+.label {
+  max-width: 160px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* ── Caret ─────────────────────────────────────────────────────────────── */
+
+.caret {
+  width: 12px;
+  height: 12px;
+  flex-shrink: 0;
+  color: var(--color-text-muted);
+  transition: transform 0.15s ease;
+  pointer-events: none;
+}
+
+.caretOpen {
+  transform: rotate(180deg);
+}

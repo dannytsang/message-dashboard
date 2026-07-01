@@ -1,0 +1,78 @@
+"use client";
+
+import { useState, useRef, useEffect } from "react";
+import UserMenu from "./UserMenu";
+import styles from "./SessionSurface.module.css";
+
+interface SessionSurfaceProps {
+  /** Display name for the placeholder identity. Passed from the shell. */
+  displayName: string;
+}
+
+/**
+ * Session surface: the interactive "session-user" chip shown in the nav.
+ *
+ * - `session-user-trigger` opens the account menu.
+ * - `session-menu` panel rendered inline (not a portal) for CSS containment.
+ * - Accepts `displayName` as a prop so the shell can inject the real OIDC
+ *   session name later without rewriting this component.
+ */
+export default function SessionSurface({ displayName }: SessionSurfaceProps) {
+  const [isOpen, setIsOpen] = useState(false);
+  const triggerRef = useRef<HTMLButtonElement>(null);
+  const menuId = "session-user-menu";
+
+  // Close on Escape (backup; UserMenu also handles this)
+  useEffect(() => {
+    if (!isOpen) return;
+    const handler = (e: KeyboardEvent) => {
+      if (e.key === "Escape") {
+        setIsOpen(false);
+        triggerRef.current?.focus();
+      }
+    };
+    document.addEventListener("keydown", handler, { capture: true });
+    return () => document.removeEventListener("keydown", handler, { capture: true });
+  }, [isOpen]);
+
+  return (
+    <div className={styles.surface}>
+      <button
+        ref={triggerRef}
+        className={`${styles.trigger} session-user session-user-trigger`}
+        aria-haspopup="menu"
+        aria-expanded={isOpen}
+        aria-controls={isOpen ? menuId : undefined}
+        onClick={() => setIsOpen((v) => !v)}
+      >
+        <span className={`${styles.label} session-user-label`}>{displayName}</span>
+
+        {/* Caret SVG */}
+        <svg
+          className={`${styles.caret} ${isOpen ? styles.caretOpen : ""}`}
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="2.5"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+          aria-hidden="true"
+          focusable="false"
+        >
+          <polyline points="6 9 12 15 18 9" />
+        </svg>
+      </button>
+
+      {isOpen && (
+        <UserMenu
+          displayName={displayName}
+          menuId={menuId}
+          onClose={() => {
+            setIsOpen(false);
+            triggerRef.current?.focus();
+          }}
+        />
+      )}
+    </div>
+  );
+}

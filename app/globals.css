@@ -21,6 +21,19 @@
   --shadow: 0 4px 24px rgba(0, 0, 0, 0.4);
 }
 
+/* Light theme — applied via data-theme="light" on <html> */
+[data-theme="light"] {
+  --color-bg: #f8f9fc;
+  --color-surface: #ffffff;
+  --color-border: #e2e8f0;
+  --color-accent: #4f46e5;
+  --color-accent-dim: rgba(79, 70, 229, 0.1);
+  --color-text-primary: #1e293b;
+  --color-text-secondary: #475569;
+  --color-text-muted: #94a3b8;
+  --shadow: 0 4px 24px rgba(0, 0, 0, 0.08);
+}
+
 html,
 body {
   height: 100%;

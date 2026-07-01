@@ -24,6 +24,14 @@
   letter-spacing: -0.01em;
 }
 
+/* ── Right cluster: nav links + session actions ────────────────────────── */
+
+.right {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
 .links {
   display: flex;
   list-style: none;
@@ -55,4 +63,13 @@
 .active:hover {
   color: var(--color-accent);
   background: var(--color-accent-dim);
+}
+
+/* ── Session actions slot (cross-dashboard session-user placement) ──────── */
+
+.sessionActions {
+  display: flex;
+  align-items: center;
+  /* Ensure the menu panel doesn't clip against the nav boundary */
+  position: relative;
 }
