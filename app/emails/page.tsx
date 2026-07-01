@@ -4,31 +4,41 @@ import { useState, useMemo } from "react";
 import { emailInboxFixtures } from "@/lib/email-fixtures";
 import styles from "./emails.module.css";
 
-// ── Sort modes ───────────────────────────────────────────────────────────────
+// ── Types ─────────────────────────────────────────────────────────────────────
+
+export type ActionState = "proposed" | "confirmed";
+
+export interface EmailInboxItem {
+  id: string;
+  /** ISO 8601 received timestamp */
+  receivedDateTime: string;
+  /** Display-ready received label, e.g. "Today" or "Yesterday" */
+  receivedLabel: string;
+  /** Display-ready received time, e.g. "14:32" */
+  receivedTime: string;
+  /** Display-ready received date, e.g. "30 Jun 2026" */
+  receivedDate: string;
+  /** Folder or label chips — safe dashboard labels only */
+  labels: string[];
+  /** Primary subject line */
+  subject: string;
+  /**
+   * Action identified by the email monitor.
+   * undefined / absent means no action identified.
+   */
+  identifiedAction?: {
+    state: ActionState;
+  };
+}
+
+// ── Sort modes ────────────────────────────────────────────────────────────────
 
 type SortMode = "latest-received" | "subject-a-z";
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
-function formatDisplayDate(iso: string): string {
-  const d = new Date(iso);
-  return d.toLocaleDateString("en-GB", {
-    day: "numeric",
-    month: "short",
-    year: "numeric",
-  });
-}
-
-function formatDisplayTime(iso: string): string {
-  return new Date(iso).toLocaleTimeString("en-GB", {
-    hour: "2-digit",
-    minute: "2-digit",
-    hour12: false,
-  });
-}
-
 /** Returns combined searchable text for a row (lower-case, whitespace-normalised) */
-function searchHaystack(item: typeof emailInboxFixtures[number]): string {
+function searchHaystack(item: EmailInboxItem): string {
   const parts = [
     item.subject,
     item.receivedLabel,
@@ -47,12 +57,10 @@ export default function EmailsPage() {
   const [actionOnly, setActionOnly] = useState(false);
   const [sort, setSort] = useState<SortMode>("latest-received");
 
-  const hasData = emailInboxFixtures.length > 0;
-
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
 
-    let rows = emailInboxFixtures;
+    let rows: EmailInboxItem[] = emailInboxFixtures;
 
     // ── Filter: action-only ──────────────────────────────────────────────────
     if (actionOnly) {
@@ -64,7 +72,7 @@ export default function EmailsPage() {
       rows = rows.filter((r) => searchHaystack(r).includes(q));
     }
 
-    // ── Sort ────────────────────────────────────────────────────────────────
+    // ── Sort ───────────────────────────────────────────────────────────────
     if (sort === "latest-received") {
       rows = [...rows].sort((a, b) => {
         const ta = new Date(a.receivedDateTime).getTime();
@@ -88,106 +96,73 @@ export default function EmailsPage() {
     setSort("latest-received");
   }
 
-  const hasActiveFilters = query.trim() !== "" || actionOnly || sort !== "latest-received";
+  const hasActiveFilters =
+    query.trim() !== "" || actionOnly || sort !== "latest-received";
 
   return (
     <main className={styles.page}>
       {/* ── Header ───────────────────────────────────────────────────── */}
       <header className={styles.header}>
         <h1 className={styles.title}>Email inbox</h1>
-        <p className={styles.subtitle}>
-          {hasData
-            ? `${emailInboxFixtures.length} messages`
-            : "No messages"}
-        </p>
+        <p className={styles.subtitle}>No messages</p>
       </header>
 
-      {/* ── Controls ───────────────────────────────────────────────────── */}
-      {hasData && (
-        <div className={styles.controls}>
-          {/* Search */}
-          <div className={styles.searchWrap}>
-            <svg
-              className={styles.searchIcon}
-              aria-hidden="true"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="2"
-            >
-              <circle cx="11" cy="11" r="8" />
-              <line x1="21" y1="21" x2="16.65" y2="16.65" />
-            </svg>
-            <input
-              type="search"
-              className={styles.searchInput}
-              placeholder="Search subject, label, action…"
-              value={query}
-              onChange={(e) => setQuery(e.target.value)}
-              aria-label="Search emails"
-            />
-          </div>
-
-          {/* Sort */}
-          <div className={styles.sortWrap}>
-            <label className={styles.sortLabel} htmlFor="email-sort">
-              Sort
-            </label>
-            <select
-              id="email-sort"
-              className={styles.sortSelect}
-              value={sort}
-              onChange={(e) => setSort(e.target.value as SortMode)}
-            >
-              <option value="latest-received">Latest received</option>
-              <option value="subject-a-z">Subject A–Z</option>
-            </select>
-          </div>
-
-          {/* Action-only toggle */}
-          <div className={styles.actionToggle}>
-            <button
-              type="button"
-              className={`${styles.actionBtn} ${actionOnly ? styles.actionBtnActive : ""}`}
-              onClick={() => setActionOnly((v) => !v)}
-              aria-pressed={actionOnly}
-            >
-              <span aria-hidden="true">⚡</span>
-              Action only
-            </button>
-          </div>
-
-          {/* Clear */}
-          {hasActiveFilters && (
-            <button
-              type="button"
-              className={styles.clearBtn}
-              onClick={clearFilters}
-            >
-              Clear filters
-            </button>
-          )}
+      {/* ── Controls (always rendered — structure-first, data-out) ──── */}
+      <div className={styles.controls}>
+        {/* Search */}
+        <div className={styles.searchWrap}>
+          <svg
+            className={styles.searchIcon}
+            aria-hidden="true"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="2"
+          >
+            <circle cx="11" cy="11" r="8" />
+            <line x1="21" y1="21" x2="16.65" y2="16.65" />
+          </svg>
+          <input
+            type="search"
+            className={styles.searchInput}
+            placeholder="Search subject, label, action…"
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            aria-label="Search emails"
+          />
         </div>
-      )}
 
-      {/* ── List ───────────────────────────────────────────────────────── */}
-      {!hasData ? (
-        /* Empty state: no inbox data at all */
-        <div className={styles.emptyState} role="status">
-          <span className={styles.emptyIcon} aria-hidden="true">📭</span>
-          <p className={styles.emptyTitle}>No inbox data</p>
-          <p className={styles.emptyBody}>
-            Inbox items will appear here once the email monitor is connected.
-          </p>
+        {/* Sort */}
+        <div className={styles.sortWrap}>
+          <label className={styles.sortLabel} htmlFor="email-sort">
+            Sort
+          </label>
+          <select
+            id="email-sort"
+            className={styles.sortSelect}
+            value={sort}
+            onChange={(e) => setSort(e.target.value as SortMode)}
+          >
+            <option value="latest-received">Latest received</option>
+            <option value="subject-a-z">Subject A–Z</option>
+          </select>
         </div>
-      ) : filtered.length === 0 ? (
-        /* Zero-results state: data exists but filters return nothing */
-        <div className={styles.emptyState} role="status">
-          <span className={styles.emptyIcon} aria-hidden="true">🔍</span>
-          <p className={styles.emptyTitle}>No results</p>
-          <p className={styles.emptyBody}>
-            No emails match the current filters. Try adjusting your search or clearing filters.
-          </p>
+
+        {/* Action-only toggle */}
+        <div className={styles.actionToggle}>
+          <button
+            type="button"
+            className={`${styles.actionBtn} ${actionOnly ? styles.actionBtnActive : ""}`}
+            onClick={() => setActionOnly((v) => !v)}
+            aria-pressed={actionOnly}
+          >
+            <span aria-hidden="true">⚡</span>
+            Action only
+          </button>
+        </div>
+
+        {/* Clear */}
+        {hasActiveFilters && (
           <button
             type="button"
             className={styles.clearBtn}
@@ -195,6 +170,17 @@ export default function EmailsPage() {
           >
             Clear filters
           </button>
+        )}
+      </div>
+
+      {/* ── List ───────────────────────────────────────────────────────── */}
+      {filtered.length === 0 ? (
+        <div className={styles.emptyState} role="status">
+          <span className={styles.emptyIcon} aria-hidden="true">📭</span>
+          <p className={styles.emptyTitle}>No inbox data</p>
+          <p className={styles.emptyBody}>
+            Inbox items will appear here once the email monitor is connected.
+          </p>
         </div>
       ) : (
         <ul className={styles.inboxList} role="list">
@@ -209,11 +195,7 @@ export default function EmailsPage() {
 
 // ── Email row ────────────────────────────────────────────────────────────────
 
-function EmailRow({
-  item,
-}: {
-  item: typeof emailInboxFixtures[number];
-}) {
+function EmailRow({ item }: { item: EmailInboxItem }) {
   const hasAction = item.identifiedAction != null;
   const actionState = item.identifiedAction?.state;
 
