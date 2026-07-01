@@ -1,78 +1,99 @@
+import {
+  whatsappFixtures,
+  emailFixtures,
+  statusLabel,
+} from "@/lib/fixtures";
 import styles from "./page.module.css";
 
-export default function PlaceholderPage() {
+export default function SummaryPage() {
+  // Interleave and sort by timestamp descending
+  type UnifiedItem =
+    | { kind: "whatsapp"; id: string; from: string; body: string; timestamp: string; relativeLabel: string; status: string; conversation: string }
+    | { kind: "email"; id: string; from: string; subject: string; snippet: string; timestamp: string; relativeLabel: string; status: string };
+
+  const items: UnifiedItem[] = [
+    ...whatsappFixtures.map((m) => ({
+      kind: "whatsapp" as const,
+      id: m.id,
+      from: m.fromName,
+      body: m.body,
+      timestamp: m.timestamp,
+      relativeLabel: m.relativeLabel,
+      status: m.status,
+      conversation: m.conversation,
+    })),
+    ...emailFixtures.map((m) => ({
+      kind: "email" as const,
+      id: m.id,
+      from: m.from,
+      subject: m.subject,
+      snippet: m.snippet,
+      timestamp: m.timestamp,
+      relativeLabel: m.relativeLabel,
+      status: m.status,
+    })),
+  ].sort(
+    (a, b) =>
+      new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime()
+  );
+
   return (
-    <main className={styles.shell}>
-      <div className={styles.hero}>
-        <div className={styles.indicator} aria-hidden="true" />
-        <h1 className={styles.heading}>Communication Dashboard</h1>
-        <p className={styles.sub}>
-          A unified view of email and WhatsApp action items — built for Danny.
+    <main className={styles.page}>
+      <header className={styles.header}>
+        <h1 className={styles.title}>All Messages</h1>
+        <p className={styles.subtitle}>
+          {items.length} items across WhatsApp and email
         </p>
-      </div>
+      </header>
 
-      <section className={styles.card}>
-        <div className={styles.cardIcon} aria-hidden="true">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-            <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
-          </svg>
-        </div>
-        <h2 className={styles.cardTitle}>Dashboard in preparation</h2>
-        <p className={styles.cardBody}>
-          The full communication dashboard is being built. Once ready, it will
-          surface email and WhatsApp action items in one place — with source,
-          status, context, and recommended next step visible at a glance.
-        </p>
-      </section>
+      <ul className={styles.list} role="list">
+        {items.map((item) => (
+          <li key={item.id} className={styles.item}>
+            <div className={styles.itemTop}>
+              <span
+                className={`${styles.platform} ${
+                  item.kind === "whatsapp" ? styles.wa : styles.em
+                }`}
+              >
+                {item.kind === "whatsapp" ? "WhatsApp" : "Email"}
+              </span>
+              <span
+                className={`${styles.statusBadge} ${styles[item.status.replace("-", "_")]}`}
+              >
+                {statusLabel(item.status as Parameters<typeof statusLabel>[0])}
+              </span>
+            </div>
 
-      <section className={styles.features}>
-        <div className={styles.feature}>
-          <div className={styles.featureIcon} aria-hidden="true">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-              <polyline points="22 12 18 12 15 21 9 3 6 12 2 12" />
-            </svg>
-          </div>
-          <div>
-            <strong>Status-aware</strong>
-            <p>Tracks open, reminded, review-needed, draft, and resolved states.</p>
-          </div>
-        </div>
-        <div className={styles.feature}>
-          <div className={styles.featureIcon} aria-hidden="true">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-              <rect x="2" y="3" width="20" height="14" rx="2" ry="2" />
-              <line x1="8" y1="21" x2="16" y2="21" />
-              <line x1="12" y1="17" x2="12" y2="21" />
-            </svg>
-          </div>
-          <div>
-            <strong>Privacy-first</strong>
-            <p>No credentials, tokens, or raw message data ever reach the client.</p>
-          </div>
-        </div>
-        <div className={styles.feature}>
-          <div className={styles.featureIcon} aria-hidden="true">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-              <circle cx="12" cy="12" r="10" />
-              <polyline points="12 6 12 12 16 14" />
-            </svg>
-          </div>
-          <div>
-            <strong>Read-only MVP</strong>
-            <p>Observes and reports — no auto-sending, no mutations.</p>
-          </div>
-        </div>
-      </section>
+            <p className={styles.itemFrom}>
+              {item.kind === "whatsapp"
+                ? (item as { kind: "whatsapp"; from: string; conversation: string }).from
+                : (item as { kind: "email"; from: string }).from}
+            </p>
 
-      <footer className={styles.footer}>
-        <p>
-          Questions? Reach out to{" "}
-          <a href="https://github.com/dannytsang" target="_blank" rel="noopener noreferrer">
-            @dannytsang
-          </a>
-          .
-        </p>
-      </footer>
+            <p className={styles.itemSubject}>
+              {item.kind === "whatsapp"
+                ? (item as { kind: "whatsapp"; body: string }).body
+                : (item as { kind: "email"; subject: string }).subject}
+            </p>
+
+            {item.kind === "whatsapp" && (
+              <p className={styles.meta}>
+                {(item as { kind: "whatsapp"; conversation: string }).conversation}
+                {" · "}
+                {item.relativeLabel}
+              </p>
+            )}
+            {item.kind === "email" && (
+              <p className={styles.meta}>
+                {(item as { kind: "email"; snippet: string }).snippet.slice(0, 80)}
+                …
+                {" · "}
+                {item.relativeLabel}
+              </p>
+            )}
+          </li>
+        ))}
+      </ul>
     </main>
   );
 }
