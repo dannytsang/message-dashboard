@@ -81,7 +81,7 @@ export default function AuthSignInPage({
             lineHeight: 1.6,
           }}
         >
-          Access the private communications dashboard to review email and WhatsApp activity, follow-ups, and items that need attention.
+          Access the private communications dashboard to review activity, follow-ups, and items that need attention.
         </p>
 
         {(errorMessage || configurationError) && (
