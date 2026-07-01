@@ -3,6 +3,7 @@ import "server-only";
 import {
   dashboardFixtureSnapshot,
   emailInboxFixtureItems,
+  whatsappDashboardFixtureSnapshot,
 } from "@/lib/dashboard-fixtures";
 import type {
   CommunicationItem,
@@ -11,10 +12,17 @@ import type {
   DashboardSnapshotV1,
   EmailInboxDisplayItem,
   EmailInboxItem,
+  WhatsAppConversationItem,
+  WhatsAppConversationKind,
+  WhatsAppDashboardReadResult,
+  WhatsAppDashboardSnapshot,
+  WhatsAppFollowUpItem,
+  WhatsAppFollowUpState,
 } from "@/lib/dashboard-types";
 
 const DASHBOARD_SNAPSHOT_URL_ENV = "COMMUNICATION_DASHBOARD_SNAPSHOT_URL";
 const EMAIL_INBOX_URL_ENV = "COMMUNICATION_EMAIL_INBOX_URL";
+const WHATSAPP_DASHBOARD_URL_ENV = "COMMUNICATION_WHATSAPP_DASHBOARD_URL";
 
 export type DashboardDataMode = "blob" | "fixture-fallback";
 
@@ -84,6 +92,71 @@ function isEmailInboxItem(value: unknown): value is EmailInboxItem {
       (isRecord(value.identifiedAction) &&
         (value.identifiedAction.state === "proposed" ||
           value.identifiedAction.state === "confirmed")))
+  );
+}
+
+function isWhatsAppConversationKind(value: unknown): value is WhatsAppConversationKind {
+  return value === "group" || value === "direct";
+}
+
+function isWhatsAppFollowUpState(value: unknown): value is WhatsAppFollowUpState {
+  return (
+    value === "proposed" ||
+    value === "scheduled" ||
+    value === "due_soon" ||
+    value === "due_now" ||
+    value === "overdue" ||
+    value === "needs_review" ||
+    value === "resolved" ||
+    value === "suppressed"
+  );
+}
+
+function isWhatsAppConversationItem(value: unknown): value is WhatsAppConversationItem {
+  return (
+    isRecord(value) &&
+    typeof value.id === "string" &&
+    isWhatsAppConversationKind(value.kind) &&
+    typeof value.displayName === "string" &&
+    typeof value.lastMessageSummary === "string" &&
+    Array.isArray(value.timeline) &&
+    value.timeline.every(
+      (entry) =>
+        isRecord(entry) &&
+        typeof entry.id === "string" &&
+        typeof entry.speaker === "string" &&
+        (entry.direction === "inbound" ||
+          entry.direction === "outbound" ||
+          entry.direction === "system") &&
+        typeof entry.summary === "string" &&
+        typeof entry.sentAt === "string",
+    )
+  );
+}
+
+function isWhatsAppFollowUpItem(value: unknown): value is WhatsAppFollowUpItem {
+  return (
+    isRecord(value) &&
+    typeof value.id === "string" &&
+    typeof value.conversationId === "string" &&
+    isWhatsAppConversationKind(value.kind) &&
+    typeof value.displayName === "string" &&
+    isWhatsAppFollowUpState(value.state) &&
+    typeof value.title === "string" &&
+    typeof value.contextSummary === "string"
+  );
+}
+
+function isWhatsAppDashboardSnapshot(value: unknown): value is WhatsAppDashboardSnapshot {
+  return (
+    isRecord(value) &&
+    typeof value.generatedAt === "string" &&
+    Array.isArray(value.monitored) &&
+    value.monitored.every(isWhatsAppConversationItem) &&
+    Array.isArray(value.drafts) &&
+    value.drafts.every(isWhatsAppConversationItem) &&
+    Array.isArray(value.followUps) &&
+    value.followUps.every(isWhatsAppFollowUpItem)
   );
 }
 
@@ -229,19 +302,36 @@ export async function readEmailInboxItems(): Promise<EmailInboxReadResult> {
   };
 }
 
-export function formatDashboardDateTime(isoDateTime?: string): string | null {
-  if (!isoDateTime) return null;
+export async function readWhatsAppDashboardData(): Promise<WhatsAppDashboardReadResult> {
+  const dashboardUrl = process.env[WHATSAPP_DASHBOARD_URL_ENV];
 
-  const date = new Date(isoDateTime);
-  if (Number.isNaN(date.getTime())) return null;
+  if (dashboardUrl) {
+    try {
+      const payload = await readJsonFromUrl(dashboardUrl);
+      if (!isWhatsAppDashboardSnapshot(payload)) {
+        throw new Error("WhatsApp dashboard payload did not match the expected shape");
+      }
 
-  return new Intl.DateTimeFormat("en-GB", {
-    day: "2-digit",
-    month: "short",
-    year: "numeric",
-    hour: "2-digit",
-    minute: "2-digit",
-    hour12: false,
-    timeZone: "UTC",
-  }).format(date);
+      return {
+        mode: "blob",
+        snapshot: payload,
+      };
+    } catch (error) {
+      return {
+        mode: "fixture-fallback",
+        snapshot: whatsappDashboardFixtureSnapshot,
+        warning:
+          error instanceof Error
+            ? `Falling back to fictional WhatsApp fixtures because the server snapshot could not be read: ${error.message}`
+            : "Falling back to fictional WhatsApp fixtures because the server snapshot could not be read.",
+      };
+    }
+  }
+
+  return {
+    mode: "fixture-fallback",
+    snapshot: whatsappDashboardFixtureSnapshot,
+  };
 }
+
+

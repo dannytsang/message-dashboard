@@ -53,3 +53,62 @@ export interface EmailInboxDisplayItem extends EmailInboxItem {
   receivedTime: string;
   receivedDate: string;
 }
+
+export type WhatsAppConversationKind = "group" | "direct";
+export type WhatsAppConversationListKey = "monitored" | "drafts";
+export type WhatsAppConversationSortMode = "latest-message" | "name-a-z";
+export type WhatsAppFollowUpSortMode = "due-soonest" | "name-a-z";
+export type WhatsAppFollowUpState =
+  | "proposed"
+  | "scheduled"
+  | "due_soon"
+  | "due_now"
+  | "overdue"
+  | "needs_review"
+  | "resolved"
+  | "suppressed";
+
+export interface WhatsAppMessageTimelineEntry {
+  id: string;
+  speaker: string;
+  direction: "inbound" | "outbound" | "system";
+  summary: string;
+  sentAt: string;
+}
+
+export interface WhatsAppConversationItem {
+  id: string;
+  kind: WhatsAppConversationKind;
+  displayName: string;
+  lastMessageSummary: string;
+  lastMessageAt?: string;
+  listNotes?: string[];
+  pendingDraftSnippet?: string;
+  historySummary?: string;
+  timeline: WhatsAppMessageTimelineEntry[];
+}
+
+export interface WhatsAppFollowUpItem {
+  id: string;
+  conversationId: string;
+  kind: WhatsAppConversationKind;
+  displayName: string;
+  state: WhatsAppFollowUpState;
+  title: string;
+  dueAt?: string;
+  relativeDueLabel?: string;
+  contextSummary: string;
+}
+
+export interface WhatsAppDashboardSnapshot {
+  generatedAt: string;
+  monitored: WhatsAppConversationItem[];
+  drafts: WhatsAppConversationItem[];
+  followUps: WhatsAppFollowUpItem[];
+}
+
+export interface WhatsAppDashboardReadResult {
+  mode: "blob" | "fixture-fallback";
+  snapshot: WhatsAppDashboardSnapshot;
+  warning?: string;
+}

@@ -1,8 +1,6 @@
 import { requireAuthenticatedPageSession } from "@/lib/auth-helpers";
-import {
-  formatDashboardDateTime,
-  readDashboardSnapshot,
-} from "@/lib/dashboard-data";
+import { readDashboardSnapshot } from "@/lib/dashboard-data";
+import { formatDashboardDateTime } from "@/lib/dashboard-format";
 import type {
   CommunicationItem,
   CommunicationStatus,
