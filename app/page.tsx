@@ -1,50 +1,84 @@
+import { requireAuthenticatedPageSession } from "@/lib/auth-helpers";
 import {
-  whatsappFixtures,
-  emailFixtures,
-  statusLabel,
-} from "@/lib/fixtures";
+  formatDashboardDateTime,
+  readDashboardSnapshot,
+} from "@/lib/dashboard-data";
+import type {
+  CommunicationItem,
+  CommunicationStatus,
+} from "@/lib/dashboard-types";
 import styles from "./page.module.css";
 
-export default function SummaryPage() {
-  // Interleave and sort by timestamp descending
-  type UnifiedItem =
-    | { kind: "whatsapp"; id: string; from: string; body: string; timestamp: string; relativeLabel: string; status: string; conversation: string }
-    | { kind: "email"; id: string; from: string; subject: string; snippet: string; timestamp: string; relativeLabel: string; status: string };
+export const runtime = "nodejs";
+export const dynamic = "force-dynamic";
 
-  const items: UnifiedItem[] = [
-    ...whatsappFixtures.map((m) => ({
-      kind: "whatsapp" as const,
-      id: m.id,
-      from: m.fromName,
-      body: m.body,
-      timestamp: m.timestamp,
-      relativeLabel: m.relativeLabel,
-      status: m.status,
-      conversation: m.conversation,
-    })),
-    ...emailFixtures.map((m) => ({
-      kind: "email" as const,
-      id: m.id,
-      from: m.from,
-      subject: m.subject,
-      snippet: m.snippet,
-      timestamp: m.timestamp,
-      relativeLabel: m.relativeLabel,
-      status: m.status,
-    })),
-  ].sort(
-    (a, b) =>
-      new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime()
-  );
+const statusLabels: Record<CommunicationStatus, string> = {
+  open: "Open",
+  reminded: "Reminded",
+  draft_awaiting_approval: "Draft awaiting approval",
+  uncertain_needs_review: "Needs review",
+  resolved: "Resolved",
+  resolved_by_history: "Resolved by history",
+  dismissed: "Dismissed",
+  suppressed: "Suppressed",
+};
+
+function metadataEntries(item: CommunicationItem) {
+  return Object.entries(item.metadata ?? {}).filter(([, value]) => value !== null);
+}
+
+export default async function SummaryPage() {
+  await requireAuthenticatedPageSession("/");
+  const { snapshot, mode } = await readDashboardSnapshot();
+  const items = [...snapshot.items].sort((a, b) => {
+    const ta = new Date(a.updatedAt ?? 0).getTime();
+    const tb = new Date(b.updatedAt ?? 0).getTime();
+    if (Number.isNaN(ta)) return 1;
+    if (Number.isNaN(tb)) return -1;
+    return tb - ta;
+  });
 
   return (
     <main className={styles.page}>
       <header className={styles.header}>
-        <h1 className={styles.title}>All Messages</h1>
+        <h1 className={styles.title}>Summary</h1>
         <p className={styles.subtitle}>
-          {items.length} items across WhatsApp and email
+          {items.length} communication items across WhatsApp and email · {mode === "blob" ? "server snapshot" : "fictional fixture fallback"}
         </p>
       </header>
+
+      <section className={styles.statBar} aria-label="Communication summary stats">
+        <div className={styles.stat}>
+          <span className={styles.statDot} aria-hidden="true" />
+          <span>
+            <strong>{snapshot.summary?.sourceCounts.whatsapp ?? 0}</strong> WhatsApp
+          </span>
+        </div>
+        <div className={styles.stat}>
+          <span className={styles.statDot} aria-hidden="true" />
+          <span>
+            <strong>{snapshot.summary?.sourceCounts.email ?? 0}</strong> Email
+          </span>
+        </div>
+        <div className={styles.stat}>
+          <span className={styles.statDot} aria-hidden="true" />
+          <span>
+            <strong>{snapshot.summary?.openCount ?? 0}</strong> Open
+          </span>
+        </div>
+        <div className={styles.stat}>
+          <span className={styles.statDot} aria-hidden="true" />
+          <span>
+            <strong>{snapshot.summary?.reviewCount ?? 0}</strong> Needs review
+          </span>
+        </div>
+        <div className={styles.stat}>
+          <span className={styles.statDot} aria-hidden="true" />
+          <span>
+            <strong>{snapshot.summary?.draftCount ?? 0}</strong> Drafts awaiting approval
+          </span>
+        </div>
+      </section>
 
       <ul className={styles.list} role="list">
         {items.map((item) => (
@@ -52,44 +86,54 @@ export default function SummaryPage() {
             <div className={styles.itemTop}>
               <span
                 className={`${styles.platform} ${
-                  item.kind === "whatsapp" ? styles.wa : styles.em
+                  item.source === "whatsapp" ? styles.wa : styles.em
                 }`}
               >
-                {item.kind === "whatsapp" ? "WhatsApp" : "Email"}
+                {item.source === "whatsapp" ? "WhatsApp" : "Email"}
               </span>
-              <span
-                className={`${styles.statusBadge} ${styles[item.status.replace("-", "_")]}`}
-              >
-                {statusLabel(item.status as Parameters<typeof statusLabel>[0])}
+              <span className={`${styles.statusBadge} ${styles[item.status]}`}>
+                {statusLabels[item.status]}
               </span>
             </div>
 
-            <p className={styles.itemFrom}>
-              {item.kind === "whatsapp"
-                ? (item as { kind: "whatsapp"; from: string; conversation: string }).from
-                : (item as { kind: "email"; from: string }).from}
-            </p>
+            <h2 className={styles.itemTitle}>{item.title}</h2>
+            <p className={styles.itemContext}>{item.context}</p>
 
-            <p className={styles.itemSubject}>
-              {item.kind === "whatsapp"
-                ? (item as { kind: "whatsapp"; body: string }).body
-                : (item as { kind: "email"; subject: string }).subject}
-            </p>
+            <dl className={styles.metaGrid}>
+              {item.displayName && (
+                <>
+                  <dt>From</dt>
+                  <dd>{item.displayName}</dd>
+                </>
+              )}
+              {item.updatedAt && (
+                <>
+                  <dt>Updated</dt>
+                  <dd>{formatDashboardDateTime(item.updatedAt)}</dd>
+                </>
+              )}
+              {item.dueAt && (
+                <>
+                  <dt>Due</dt>
+                  <dd>{formatDashboardDateTime(item.dueAt)}</dd>
+                </>
+              )}
+              {item.recommendedAction && (
+                <>
+                  <dt>Next step</dt>
+                  <dd>{item.recommendedAction}</dd>
+                </>
+              )}
+            </dl>
 
-            {item.kind === "whatsapp" && (
-              <p className={styles.meta}>
-                {(item as { kind: "whatsapp"; conversation: string }).conversation}
-                {" · "}
-                {item.relativeLabel}
-              </p>
-            )}
-            {item.kind === "email" && (
-              <p className={styles.meta}>
-                {(item as { kind: "email"; snippet: string }).snippet.slice(0, 80)}
-                …
-                {" · "}
-                {item.relativeLabel}
-              </p>
+            {metadataEntries(item).length > 0 && (
+              <div className={styles.labels}>
+                {metadataEntries(item).map(([key, value]) => (
+                  <span key={key} className={styles.label}>
+                    {key.replace(/([A-Z])/g, " $1").replace(/^./, (letter) => letter.toUpperCase())}: {String(value)}
+                  </span>
+                ))}
+              </div>
             )}
           </li>
         ))}

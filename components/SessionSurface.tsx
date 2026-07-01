@@ -5,24 +5,18 @@ import UserMenu from "./UserMenu";
 import styles from "./SessionSurface.module.css";
 
 interface SessionSurfaceProps {
-  /** Display name for the placeholder identity. Passed from the shell. */
   displayName: string;
+  signOutEnabled?: boolean;
 }
 
-/**
- * Session surface: the interactive "session-user" chip shown in the nav.
- *
- * - `session-user-trigger` opens the account menu.
- * - `session-menu` panel rendered inline (not a portal) for CSS containment.
- * - Accepts `displayName` as a prop so the shell can inject the real OIDC
- *   session name later without rewriting this component.
- */
-export default function SessionSurface({ displayName }: SessionSurfaceProps) {
+export default function SessionSurface({
+  displayName,
+  signOutEnabled = false,
+}: SessionSurfaceProps) {
   const [isOpen, setIsOpen] = useState(false);
   const triggerRef = useRef<HTMLButtonElement>(null);
   const menuId = "session-user-menu";
 
-  // Close on Escape (backup; UserMenu also handles this)
   useEffect(() => {
     if (!isOpen) return;
     const handler = (e: KeyboardEvent) => {
@@ -46,8 +40,6 @@ export default function SessionSurface({ displayName }: SessionSurfaceProps) {
         onClick={() => setIsOpen((v) => !v)}
       >
         <span className={`${styles.label} session-user-label`}>{displayName}</span>
-
-        {/* Caret SVG */}
         <svg
           className={`${styles.caret} ${isOpen ? styles.caretOpen : ""}`}
           viewBox="0 0 24 24"
@@ -67,6 +59,7 @@ export default function SessionSurface({ displayName }: SessionSurfaceProps) {
         <UserMenu
           displayName={displayName}
           menuId={menuId}
+          signOutEnabled={signOutEnabled}
           onClose={() => {
             setIsOpen(false);
             triggerRef.current?.focus();

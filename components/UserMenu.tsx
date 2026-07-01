@@ -1,15 +1,22 @@
 "use client";
 
+import { signOut } from "next-auth/react";
 import { useEffect, useRef, useState } from "react";
 import styles from "./UserMenu.module.css";
 
 interface UserMenuProps {
   displayName: string;
   menuId: string;
+  signOutEnabled: boolean;
   onClose: () => void;
 }
 
-export default function UserMenu({ displayName, menuId, onClose }: UserMenuProps) {
+export default function UserMenu({
+  displayName,
+  menuId,
+  signOutEnabled,
+  onClose,
+}: UserMenuProps) {
   const menuRef = useRef<HTMLDivElement>(null);
   const [currentTheme, setCurrentTheme] = useState("dark");
 
@@ -21,7 +28,6 @@ export default function UserMenu({ displayName, menuId, onClose }: UserMenuProps
     }
   }, []);
 
-  // Click-outside and Escape to close
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.key === "Escape") {
@@ -36,7 +42,6 @@ export default function UserMenu({ displayName, menuId, onClose }: UserMenuProps
       }
     };
 
-    // Delay to avoid closing immediately on the same click that opened
     const timer = setTimeout(() => {
       document.addEventListener("mousedown", handleClickOutside);
     }, 0);
@@ -64,6 +69,11 @@ export default function UserMenu({ displayName, menuId, onClose }: UserMenuProps
     onClose();
   };
 
+  const handleSignOut = async () => {
+    onClose();
+    await signOut({ callbackUrl: "/auth/signin" });
+  };
+
   return (
     <div
       id={menuId}
@@ -72,23 +82,19 @@ export default function UserMenu({ displayName, menuId, onClose }: UserMenuProps
       aria-label="Account menu"
       className={`${styles.menu} session-menu`}
     >
-      {/* Identity header */}
       <div className={styles.identityRow} role="presentation">
         <span className={styles.identityLabel}>Signed in as</span>
         <span className={styles.identityValue}>{displayName}</span>
       </div>
 
-      {/* Divider */}
       <div className={styles.divider} role="presentation" />
 
-      {/* Theme row */}
       <button
         role="menuitem"
         className={`${styles.row} session-menu-item theme-toggle`}
         onClick={toggleTheme}
         aria-label={`Switch to ${currentTheme === "light" ? "dark" : "light"} theme`}
       >
-        {/* Sun/Moon icon */}
         {currentTheme === "dark" ? (
           <svg
             className={styles.rowIcon}
@@ -129,13 +135,12 @@ export default function UserMenu({ displayName, menuId, onClose }: UserMenuProps
         </span>
       </button>
 
-      {/* Debug row — disabled/pending: no private data until OIDC */}
       <button
         role="menuitem"
         className={`${styles.row} session-menu-item session-menu-item--debug`}
         disabled
         aria-disabled="true"
-        title="Pending — available after OIDC is configured"
+        title="Pending — available after private diagnostics are designed"
       >
         <svg
           className={styles.rowIcon}
@@ -153,16 +158,15 @@ export default function UserMenu({ displayName, menuId, onClose }: UserMenuProps
         <span className={styles.rowLabel}>Debug</span>
       </button>
 
-      {/* Divider */}
       <div className={styles.divider} role="presentation" />
 
-      {/* Sign out row — disabled/pending: no OIDC yet */}
       <button
         role="menuitem"
         className={`${styles.row} session-menu-item session-menu-item--sign-out`}
-        disabled
-        aria-disabled="true"
-        title="Pending — available after OIDC is configured"
+        disabled={!signOutEnabled}
+        aria-disabled={!signOutEnabled}
+        title={signOutEnabled ? "Sign out" : "Unavailable until authentication is active"}
+        onClick={handleSignOut}
       >
         <svg
           className={styles.rowIcon}
