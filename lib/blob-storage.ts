@@ -1,5 +1,5 @@
 import "server-only";
-import { put, head } from "@vercel/blob";
+import { put, get } from "@vercel/blob";
 import { createHash } from "node:crypto";
 
 /**
@@ -33,13 +33,12 @@ export class VercelBlobStorageClient implements BlobStorageClient {
 
   async readBlobText(path: string): Promise<string | null> {
     try {
-      const meta = await head(path, { token: this.token });
-      if (!meta) return null;
-      const response = await fetch(meta.url, {
-        headers: this.token ? { Authorization: `Bearer ${this.token}` } : undefined,
+      const result = await get(path, {
+        access: "private",
+        token: this.token,
       });
-      if (!response.ok) return null;
-      return response.text();
+      if (!result || result.statusCode !== 200 || !result.stream) return null;
+      return new Response(result.stream).text();
     } catch {
       return null;
     }
