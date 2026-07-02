@@ -18,6 +18,10 @@ function buildRedirect(request: NextRequest, error?: string) {
 }
 
 export async function middleware(request: NextRequest) {
+  if (request.nextUrl.pathname === "/api/dashboard/sync") {
+    return NextResponse.next();
+  }
+
   const configurationError = getAuthConfigurationError();
   if (configurationError) {
     return buildRedirect(request, "Configuration");
