@@ -5,6 +5,7 @@ import {
   emailInboxFixtureItems,
   whatsappDashboardFixtureSnapshot,
 } from "@/lib/dashboard-fixtures";
+import { VercelBlobStorageClient } from "@/lib/blob-storage";
 import type {
   CommunicationItem,
   CommunicationSource,
@@ -24,6 +25,10 @@ const DASHBOARD_SNAPSHOT_URL_ENV = "COMMUNICATION_DASHBOARD_SNAPSHOT_URL";
 const EMAIL_INBOX_URL_ENV = "COMMUNICATION_EMAIL_INBOX_URL";
 const WHATSAPP_DASHBOARD_URL_ENV = "COMMUNICATION_WHATSAPP_DASHBOARD_URL";
 
+// Deterministic blob paths for separated source storage (spec 007/008)
+const EMAIL_SOURCE_BLOB_PATH = "dashboard/v1/email/latest.json";
+const WHATSAPP_SOURCE_BLOB_PATH = "dashboard/v1/whatsapp/latest.json";
+
 export type DashboardDataMode = "blob" | "fixture-fallback";
 
 interface DashboardReadResult {
@@ -35,6 +40,12 @@ interface DashboardReadResult {
 interface EmailInboxReadResult {
   mode: DashboardDataMode;
   items: EmailInboxDisplayItem[];
+  warning?: string;
+}
+
+interface EmailSourceReadResult {
+  mode: DashboardDataMode;
+  snapshot: EmailSourceSnapshot | null;
   warning?: string;
 }
 
@@ -93,6 +104,21 @@ function isEmailInboxItem(value: unknown): value is EmailInboxItem {
         (value.identifiedAction.state === "proposed" ||
           value.identifiedAction.state === "confirmed")))
   );
+}
+
+function isEmailSourceSnapshot(value: unknown): value is EmailSourceSnapshot {
+  return (
+    isRecord(value) &&
+    typeof value.generatedAt === "string" &&
+    Array.isArray(value.items)
+  );
+}
+
+export interface EmailSourceSnapshot {
+  schemaVersion?: string;
+  generatedAt: string;
+  summary?: Record<string, unknown> | null;
+  items: EmailInboxItem[];
 }
 
 function isWhatsAppConversationKind(value: unknown): value is WhatsAppConversationKind {
@@ -173,6 +199,11 @@ async function readJsonFromUrl(url: string): Promise<unknown> {
   }
 
   return response.json();
+}
+
+async function readBlobText(path: string): Promise<string | null> {
+  const client = new VercelBlobStorageClient();
+  return client.readBlobText(path);
 }
 
 function formatRelativeLabel(date: Date): string {
@@ -270,16 +301,64 @@ export async function readDashboardSnapshot(): Promise<DashboardReadResult> {
   };
 }
 
-export async function readEmailInboxItems(): Promise<EmailInboxReadResult> {
-  const inboxUrl = process.env[EMAIL_INBOX_URL_ENV];
+export async function readEmailSourceSnapshot(): Promise<EmailSourceReadResult> {
+  const text = await readBlobText(EMAIL_SOURCE_BLOB_PATH);
+  // Treat null (not found), empty, or whitespace-only as unavailable
+  if (text === null || text.trim() === "") {
+    return {
+      mode: "fixture-fallback",
+      snapshot: null,
+      warning: "Email snapshot unavailable; falling back to fictional inbox fixtures.",
+    };
+  }
+  try {
+    const payload = JSON.parse(text);
+    if (!isEmailSourceSnapshot(payload)) {
+      throw new Error("Email source snapshot did not match expected schema");
+    }
+    return { mode: "blob", snapshot: payload };
+  } catch (error) {
+    return {
+      mode: "fixture-fallback",
+      snapshot: null,
+      warning:
+        error instanceof Error
+          ? `Email snapshot malformed; falling back to fictional inbox fixtures: ${error.message}`
+          : "Email snapshot malformed; falling back to fictional inbox fixtures.",
+    };
+  }
+}
 
+export async function readEmailInboxItems(): Promise<EmailInboxReadResult> {
+  // Priority 1: deterministic blob path (spec 007/008)
+  const text = await readBlobText(EMAIL_SOURCE_BLOB_PATH);
+  // Treat null (not found), empty, or whitespace-only as unavailable
+  if (text !== null && text.trim() !== "") {
+    try {
+      const payload = JSON.parse(text);
+      if (!isEmailSourceSnapshot(payload)) {
+        throw new Error("Email source snapshot did not match expected schema");
+      }
+      if (!payload.items.every(isEmailInboxItem)) {
+        throw new Error("Email items did not match expected shape");
+      }
+      return {
+        mode: "blob",
+        items: payload.items.map(formatEmailInboxDisplay),
+      };
+    } catch (error) {
+      // Malformed blob — fall through to fixtures
+    }
+  }
+
+  // Priority 2: legacy URL env var (backward compat for dev/preview)
+  const inboxUrl = process.env[EMAIL_INBOX_URL_ENV];
   if (inboxUrl) {
     try {
       const payload = await readJsonFromUrl(inboxUrl);
       if (!Array.isArray(payload) || !payload.every(isEmailInboxItem)) {
         throw new Error("Inbox payload did not match the expected email inbox shape");
       }
-
       return {
         mode: "blob",
         items: payload.map(formatEmailInboxDisplay),

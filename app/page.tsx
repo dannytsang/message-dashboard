@@ -1,5 +1,10 @@
 import { requireAuthenticatedPageSession } from "@/lib/auth-helpers";
-import { readDashboardSnapshot } from "@/lib/dashboard-data";
+import {
+  readDashboardSnapshot,
+  readWhatsAppDashboardData,
+  readEmailSourceSnapshot,
+  type EmailSourceSnapshot,
+} from "@/lib/dashboard-data";
 import { formatDashboardDateTime } from "@/lib/dashboard-format";
 import type {
   CommunicationItem,
@@ -27,8 +32,65 @@ function metadataEntries(item: CommunicationItem) {
 
 export default async function SummaryPage() {
   await requireAuthenticatedPageSession("/");
-  const { snapshot, mode } = await readDashboardSnapshot();
-  const items = [...snapshot.items].sort((a, b) => {
+
+  // Independently read both sources (spec 007/008 FR-002, FR-003)
+  const [dashboardResult, whatsappResult, emailResult] = await Promise.all([
+    readDashboardSnapshot(),
+    readWhatsAppDashboardData(),
+    readEmailSourceSnapshot(),
+  ]);
+
+  const { snapshot: dashboardSnapshot, mode: dashboardMode } = dashboardResult;
+  const { snapshot: whatsappSnapshot, mode: whatsappMode, warning: whatsappWarning } = whatsappResult;
+  const { snapshot: emailSnapshot, mode: emailMode, warning: emailWarning } = emailResult;
+
+  // Merge items from both available sources (spec 007 FR-009, FR-003)
+  // When a real email source snapshot is available, exclude email items from the
+  // legacy combined snapshot to prevent fixture+real duplication (FR-009).
+  const mergedItems: CommunicationItem[] = [];
+  const emailSnapshotIds = new Set<string>(
+    emailSnapshot ? emailSnapshot.items.map((i) => i.id) : [],
+  );
+
+  // Items from legacy combined dashboard snapshot
+  if (dashboardSnapshot) {
+    // Filter out email items already covered by the real email source snapshot
+    const dashboardEmailItems = emailSnapshot
+      ? dashboardSnapshot.items.filter((i) => i.source !== "email" || !emailSnapshotIds.has(i.id))
+      : dashboardSnapshot.items;
+    mergedItems.push(...dashboardEmailItems);
+  }
+
+  // Items derived from WhatsApp source snapshot (spec 007)
+  if (whatsappSnapshot) {
+    for (const conv of whatsappSnapshot.monitored) {
+      mergedItems.push({
+        id: conv.id,
+        source: "whatsapp",
+        status: "open",
+        title: conv.displayName,
+        context: conv.lastMessageSummary,
+        updatedAt: conv.lastMessageAt,
+      });
+    }
+  }
+
+  // Items derived from email source snapshot (specs 007/008)
+  if (emailSnapshot) {
+    for (const item of emailSnapshot.items) {
+      mergedItems.push({
+        id: item.id,
+        source: "email",
+        status: item.identifiedAction?.state === "confirmed" ? "open" : "uncertain_needs_review",
+        title: item.subject,
+        context: "",
+        updatedAt: item.receivedDateTime,
+        metadata: { labels: item.labels.join(", ") },
+      });
+    }
+  }
+
+  const sortedItems = [...mergedItems].sort((a, b) => {
     const ta = new Date(a.updatedAt ?? 0).getTime();
     const tb = new Date(b.updatedAt ?? 0).getTime();
     if (Number.isNaN(ta)) return 1;
@@ -36,50 +98,65 @@ export default async function SummaryPage() {
     return tb - ta;
   });
 
+  const emailCount = sortedItems.filter((i) => i.source === "email").length;
+  const whatsappCount = sortedItems.filter((i) => i.source === "whatsapp").length;
+  const openCount = sortedItems.filter((i) => i.status === "open").length;
+  const reviewCount = sortedItems.filter((i) => i.status === "uncertain_needs_review").length;
+
+  const modeLabel =
+    dashboardMode === "blob" || whatsappMode === "blob" || emailMode === "blob"
+      ? "server snapshot"
+      : "fictional fixture fallback";
+
   return (
     <main className={styles.page}>
       <header className={styles.header}>
         <h1 className={styles.title}>Summary</h1>
         <p className={styles.subtitle}>
-          {items.length} communication items across WhatsApp and email · {mode === "blob" ? "server snapshot" : "fictional fixture fallback"}
+          {sortedItems.length} communication items across WhatsApp and email · {modeLabel}
         </p>
       </header>
+
+      {whatsappWarning && (
+        <p className={styles.warning} role="alert">
+          WhatsApp: {whatsappWarning}
+        </p>
+      )}
+      {emailWarning && (
+        <p className={styles.warning} role="alert">
+          Email: {emailWarning}
+        </p>
+      )}
 
       <section className={styles.statBar} aria-label="Communication summary stats">
         <div className={styles.stat}>
           <span className={styles.statDot} aria-hidden="true" />
           <span>
-            <strong>{snapshot.summary?.sourceCounts.whatsapp ?? 0}</strong> WhatsApp
+            <strong>{whatsappCount}</strong> WhatsApp
           </span>
         </div>
         <div className={styles.stat}>
           <span className={styles.statDot} aria-hidden="true" />
           <span>
-            <strong>{snapshot.summary?.sourceCounts.email ?? 0}</strong> Email
+            <strong>{emailCount}</strong> Email
           </span>
         </div>
         <div className={styles.stat}>
           <span className={styles.statDot} aria-hidden="true" />
           <span>
-            <strong>{snapshot.summary?.openCount ?? 0}</strong> Open
+            <strong>{openCount}</strong> Open
           </span>
         </div>
         <div className={styles.stat}>
           <span className={styles.statDot} aria-hidden="true" />
           <span>
-            <strong>{snapshot.summary?.reviewCount ?? 0}</strong> Needs review
-          </span>
-        </div>
-        <div className={styles.stat}>
-          <span className={styles.statDot} aria-hidden="true" />
-          <span>
-            <strong>{snapshot.summary?.draftCount ?? 0}</strong> Drafts awaiting approval
+            <strong>{reviewCount}</strong> Needs review
           </span>
         </div>
       </section>
 
       <ul className={styles.list} role="list">
-        {items.map((item) => (
+        {sortedItems.map((item) => (
           <li key={item.id} className={styles.item}>
             <div className={styles.itemTop}>
               <span
