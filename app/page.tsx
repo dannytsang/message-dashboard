@@ -44,25 +44,17 @@ export default async function SummaryPage() {
   const { snapshot: whatsappSnapshot, mode: whatsappMode, warning: whatsappWarning } = whatsappResult;
   const { snapshot: emailSnapshot, mode: emailMode, warning: emailWarning } = emailResult;
 
-  // Merge items from both available sources (spec 007 FR-009, FR-003)
-  // When a real email source snapshot is available, exclude email items from the
-  // legacy combined snapshot to prevent fixture+real duplication (FR-009).
+  // Merge items from available real sources. If no real source is available at all,
+  // fall back to the legacy combined dashboard fixtures for local/demo safety.
   const mergedItems: CommunicationItem[] = [];
-  const emailSnapshotIds = new Set<string>(
-    emailSnapshot ? emailSnapshot.items.map((i) => i.id) : [],
-  );
+  const hasRealSource = emailMode === "blob" || whatsappMode === "blob" || dashboardMode === "blob";
 
-  // Items from legacy combined dashboard snapshot
-  if (dashboardSnapshot) {
-    // Filter out email items already covered by the real email source snapshot
-    const dashboardEmailItems = emailSnapshot
-      ? dashboardSnapshot.items.filter((i) => i.source !== "email" || !emailSnapshotIds.has(i.id))
-      : dashboardSnapshot.items;
-    mergedItems.push(...dashboardEmailItems);
+  if (!hasRealSource && dashboardSnapshot) {
+    mergedItems.push(...dashboardSnapshot.items);
   }
 
   // Items derived from WhatsApp source snapshot (spec 007)
-  if (whatsappSnapshot) {
+  if (whatsappMode === "blob" && whatsappSnapshot) {
     for (const conv of whatsappSnapshot.monitored) {
       mergedItems.push({
         id: conv.id,
@@ -76,7 +68,7 @@ export default async function SummaryPage() {
   }
 
   // Items derived from email source snapshot (specs 007/008)
-  if (emailSnapshot) {
+  if (emailMode === "blob" && emailSnapshot) {
     for (const item of emailSnapshot.items) {
       mergedItems.push({
         id: item.id,
