@@ -101,8 +101,11 @@ function isEmailInboxItem(value: unknown): value is EmailInboxItem {
     value.labels.every((label) => typeof label === "string") &&
     (value.identifiedAction === undefined ||
       (isRecord(value.identifiedAction) &&
+        typeof value.identifiedAction.actionPhrase === "string" &&
         (value.identifiedAction.state === "proposed" ||
-          value.identifiedAction.state === "confirmed")))
+          value.identifiedAction.state === "confirmed") &&
+        (value.identifiedAction.actionType === undefined ||
+          typeof value.identifiedAction.actionType === "string")))
   );
 }
 

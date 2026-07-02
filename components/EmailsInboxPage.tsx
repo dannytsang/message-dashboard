@@ -12,13 +12,16 @@ interface EmailsInboxPageProps {
 }
 
 function searchHaystack(item: EmailInboxDisplayItem): string {
+  const action = item.identifiedAction;
   return [
     item.subject,
     item.receivedLabel,
     item.receivedDate,
     item.receivedTime,
     item.labels.join(" "),
-    item.identifiedAction?.state ?? "",
+    action?.actionPhrase ?? "",
+    action?.actionType ?? "",
+    action?.state ?? "",
   ]
     .join(" ")
     .toLowerCase();
@@ -189,10 +192,11 @@ export default function EmailsInboxPage({
 }
 
 function EmailRow({ item }: { item: EmailInboxDisplayItem }) {
-  const actionState = item.identifiedAction?.state;
+  const action = item.identifiedAction;
 
   return (
     <li className={styles.inboxRow}>
+      {/* Column 1: received date/time */}
       <div className={styles.rowDate}>
         <span className={styles.rowDateLabel}>{item.receivedLabel}</span>
         <time className={styles.rowTime} dateTime={item.receivedDateTime}>
@@ -200,6 +204,7 @@ function EmailRow({ item }: { item: EmailInboxDisplayItem }) {
         </time>
       </div>
 
+      {/* Column 2: labels */}
       <div className={styles.rowLabels}>
         {item.labels.map((label) => (
           <span key={label} className={styles.labelChip}>
@@ -208,21 +213,23 @@ function EmailRow({ item }: { item: EmailInboxDisplayItem }) {
         ))}
       </div>
 
-      <div className={styles.rowSubject}>
+      {/* Column 3: subject + action — Subject Priority A */}
+      <div className={styles.rowSubjectArea}>
         <span className={styles.rowSubjectText}>{item.subject}</span>
-        {actionState && (
-          <div className={styles.rowAction}>
-            <span className={styles.actionEmoji} aria-hidden="true">
-              ⚡
-            </span>
+        {action && (
+          <div className={styles.rowActionArea}>
+            {action.actionType && (
+              <span className={styles.actionType}>{action.actionType}</span>
+            )}
+            <span className={styles.actionPhrase}>{action.actionPhrase}</span>
             <span
               className={`${styles.actionBadge} ${
-                actionState === "confirmed"
+                action.state === "confirmed"
                   ? styles.actionBadgeConfirmed
                   : styles.actionBadgeProposed
               }`}
             >
-              {actionState === "confirmed" ? "Confirmed" : "Proposed"}
+              {action.state === "confirmed" ? "Confirmed" : "Proposed"}
             </span>
           </div>
         )}

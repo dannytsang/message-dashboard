@@ -167,6 +167,8 @@ export const emailInboxFixtureItems: EmailInboxItem[] = [
     subject: "Expense reconciliation form due today",
     identifiedAction: {
       state: "proposed",
+      actionPhrase: "Complete the reconciliation form",
+      actionType: "Complete",
     },
   },
   {
@@ -176,6 +178,8 @@ export const emailInboxFixtureItems: EmailInboxItem[] = [
     subject: "Guest list update ready for confirmation",
     identifiedAction: {
       state: "confirmed",
+      actionPhrase: "Confirm guest list change",
+      actionType: "Confirm",
     },
   },
   {
@@ -185,6 +189,8 @@ export const emailInboxFixtureItems: EmailInboxItem[] = [
     subject: "Review the fictional rail booking change notice",
     identifiedAction: {
       state: "proposed",
+      actionPhrase: "Review the proposed booking change",
+      actionType: "Review",
     },
   },
   {

@@ -38,14 +38,20 @@ export interface DashboardSnapshotV1 {
 
 export type EmailActionState = "proposed" | "confirmed";
 
+export interface EmailIdentifiedAction {
+  state: EmailActionState;
+  /** Short dashboard-safe phrase describing what needs doing. Required when an action is identified. */
+  actionPhrase: string;
+  /** Optional action type label such as "Confirm", "Complete", "Review", "Pay". */
+  actionType?: string;
+}
+
 export interface EmailInboxItem {
   id: string;
   receivedDateTime: string;
   labels: string[];
   subject: string;
-  identifiedAction?: {
-    state: EmailActionState;
-  };
+  identifiedAction?: EmailIdentifiedAction;
 }
 
 export interface EmailInboxDisplayItem extends EmailInboxItem {
