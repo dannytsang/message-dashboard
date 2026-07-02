@@ -21,6 +21,13 @@ interface WhatsAppDashboardPageProps {
   dataMode: "blob" | "fixture-fallback";
 }
 
+interface ConversationBucket {
+  id: "now" | "next" | "recent";
+  label: string;
+  helper: string;
+  items: WhatsAppConversationItem[];
+}
+
 const conversationSortLabels: Record<WhatsAppConversationSortMode, string> = {
   "latest-message": "Latest message",
   "name-a-z": "Name A–Z",
@@ -164,6 +171,54 @@ function kindLabel(kind: WhatsAppConversationItem["kind"] | WhatsAppFollowUpItem
   return kind === "group" ? "Group" : "Direct";
 }
 
+function bucketConversationItems(
+  items: WhatsAppConversationItem[],
+  snapshotGeneratedAt: string,
+): ConversationBucket[] {
+  const generatedAt = new Date(snapshotGeneratedAt).getTime();
+  const hasReferenceTime = Number.isFinite(generatedAt);
+
+  const buckets: ConversationBucket[] = [
+    { id: "now", label: "Now", helper: "Fresh or time-sensitive chats", items: [] },
+    { id: "next", label: "Next", helper: "Still active but not immediate", items: [] },
+    { id: "recent", label: "Recent", helper: "Older context to keep visible", items: [] },
+  ];
+
+  for (const item of items) {
+    const messageTime = new Date(item.lastMessageAt ?? 0).getTime();
+    const ageHours =
+      hasReferenceTime && Number.isFinite(messageTime) ? (generatedAt - messageTime) / (1000 * 60 * 60) : null;
+
+    if (ageHours != null && ageHours <= 6) {
+      buckets[0].items.push(item);
+      continue;
+    }
+
+    if (ageHours != null && ageHours <= 30) {
+      buckets[1].items.push(item);
+      continue;
+    }
+
+    buckets[2].items.push(item);
+  }
+
+  return buckets.filter((bucket) => bucket.items.length > 0);
+}
+
+function conversationRowTokens(item: WhatsAppConversationItem, origin: WhatsAppConversationListKey) {
+  const tokens: string[] = [];
+
+  if (origin === "drafts" && item.pendingDraftSnippet) {
+    tokens.push(`Draft · ${item.pendingDraftSnippet}`);
+  }
+
+  if (item.listNotes?.length) {
+    tokens.push(...item.listNotes);
+  }
+
+  return tokens;
+}
+
 export default function WhatsAppDashboardPage({
   snapshot,
   dataMode,
@@ -211,6 +266,16 @@ export default function WhatsAppDashboardPage({
     );
   }, [draftsQuery, draftsSort, snapshot.drafts]);
 
+  const monitoredBuckets = useMemo(
+    () => bucketConversationItems(monitoredItems, snapshot.generatedAt),
+    [monitoredItems, snapshot.generatedAt],
+  );
+
+  const draftBuckets = useMemo(
+    () => bucketConversationItems(draftItems, snapshot.generatedAt),
+    [draftItems, snapshot.generatedAt],
+  );
+
   const followUpItems = useMemo(() => {
     const query = normalizeQuery(followUpQuery);
     return sortFollowUps(
@@ -250,7 +315,7 @@ export default function WhatsAppDashboardPage({
               searchPlaceholder="Search monitored by display name"
               sort={monitoredSort}
               onSortChange={setMonitoredSort}
-              items={monitoredItems}
+              buckets={monitoredBuckets}
               origin="monitored"
               selectedConversationId={selection?.conversationId ?? null}
               onSelect={(conversationId) => setSelection({ conversationId, origin: "monitored" })}
@@ -271,7 +336,7 @@ export default function WhatsAppDashboardPage({
               searchPlaceholder="Search drafts by display name"
               sort={draftsSort}
               onSortChange={setDraftsSort}
-              items={draftItems}
+              buckets={draftBuckets}
               origin="drafts"
               selectedConversationId={selection?.conversationId ?? null}
               onSelect={(conversationId) => setSelection({ conversationId, origin: "drafts" })}
@@ -314,7 +379,7 @@ interface ConversationSectionProps {
   searchPlaceholder: string;
   sort: WhatsAppConversationSortMode;
   onSortChange: (value: WhatsAppConversationSortMode) => void;
-  items: WhatsAppConversationItem[];
+  buckets: ConversationBucket[];
   origin: WhatsAppConversationListKey;
   selectedConversationId: string | null;
   onSelect: (conversationId: string) => void;
@@ -331,13 +396,15 @@ function ConversationSection({
   searchPlaceholder,
   sort,
   onSortChange,
-  items,
+  buckets,
   origin,
   selectedConversationId,
   onSelect,
   emptyTitle,
   emptyBody,
 }: ConversationSectionProps) {
+  const visibleCount = buckets.reduce((sum, bucket) => sum + bucket.items.length, 0);
+
   return (
     <section className={styles.sectionCard} aria-labelledby={`${origin}-title`}>
       <div className={styles.sectionHeader}>
@@ -376,24 +443,37 @@ function ConversationSection({
               ))}
             </select>
           </div>
-          <span className={styles.metaLabel}>Read-only conversation list</span>
+          <span className={styles.metaLabel}>Read-only conversation list · {visibleCount} visible</span>
         </div>
       </div>
 
-      {items.length === 0 ? (
+      {visibleCount === 0 ? (
         <EmptyState title={emptyTitle} body={emptyBody} />
       ) : (
-        <ul className={styles.list} role="list">
-          {items.map((item) => (
-            <ConversationRow
-              key={`${origin}-${item.id}`}
-              item={item}
-              isSelected={selectedConversationId === item.id}
-              origin={origin}
-              onSelect={() => onSelect(item.id)}
-            />
+        <div className={styles.bucketStack}>
+          {buckets.map((bucket) => (
+            <section key={`${origin}-${bucket.id}`} className={styles.bucketSection}>
+              <div className={styles.bucketHeader}>
+                <div>
+                  <h3 className={styles.bucketTitle}>{bucket.label}</h3>
+                  <p className={styles.bucketHelper}>{bucket.helper}</p>
+                </div>
+                <span className={styles.bucketCount}>{bucket.items.length}</span>
+              </div>
+              <ul className={styles.list} role="list">
+                {bucket.items.map((item) => (
+                  <ConversationRow
+                    key={`${origin}-${item.id}`}
+                    item={item}
+                    isSelected={selectedConversationId === item.id}
+                    origin={origin}
+                    onSelect={() => onSelect(item.id)}
+                  />
+                ))}
+              </ul>
+            </section>
           ))}
-        </ul>
+        </div>
       )}
     </section>
   );
@@ -448,6 +528,7 @@ function ConversationRow({
 }) {
   const absoluteTime = formatDashboardDateTime(item.lastMessageAt) ?? "Unknown time";
   const relativeTime = formatDashboardRelativeDateTime(item.lastMessageAt) ?? "No recent timestamp";
+  const rowTokens = conversationRowTokens(item, origin);
 
   return (
     <li>
@@ -457,8 +538,8 @@ function ConversationRow({
         aria-pressed={isSelected}
         onClick={onSelect}
       >
-        <div className={styles.rowTop}>
-          <div className={styles.rowTitleWrap}>
+        <div className={styles.compactRowTop}>
+          <div className={styles.compactIdentity}>
             <div className={styles.badges}>
               <span
                 className={`${styles.kindBadge} ${
@@ -472,28 +553,23 @@ function ConversationRow({
             <span className={styles.displayName}>{item.displayName}</span>
           </div>
 
-          <div className={styles.rowMeta}>
+          <div className={styles.compactMeta}>
             <span className={styles.timeLabel}>{relativeTime}</span>
+            <span className={styles.metaLabel}>{absoluteTime}</span>
           </div>
         </div>
 
-        <p className={styles.lastMessage}>{item.lastMessageSummary}</p>
-
-        {item.pendingDraftSnippet && <p className={styles.draftSnippet}>{item.pendingDraftSnippet}</p>}
-
-        {item.listNotes && item.listNotes.length > 0 && (
-          <div className={styles.noteList}>
-            {item.listNotes.map((note) => (
-              <span key={note} className={styles.noteBadge}>
-                {note}
-              </span>
-            ))}
-          </div>
-        )}
-
-        <div className={styles.rowMeta}>
-          <span className={styles.metaLabel}>{conversationSortLabels["latest-message"]} · {absoluteTime}</span>
-          <span className={styles.metaLabel}>Open history</span>
+        <div className={styles.compactRowBottom}>
+          <p className={styles.lastMessage}>{item.lastMessageSummary}</p>
+          {rowTokens.length > 0 && (
+            <div className={styles.noteList}>
+              {rowTokens.map((note) => (
+                <span key={note} className={styles.noteBadge}>
+                  {note}
+                </span>
+              ))}
+            </div>
+          )}
         </div>
       </button>
     </li>
