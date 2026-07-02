@@ -34,21 +34,25 @@ interface SyncPayload {
 }
 
 function isEmailInboxItem(value: unknown): value is EmailInboxItem {
+  if (typeof value !== "object" || value === null) return false;
+
+  const row = value as EmailInboxItem;
+  const action = row.identifiedAction;
+
   return (
-    typeof value === "object" &&
-    value !== null &&
-    typeof (value as EmailInboxItem).id === "string" &&
-    typeof (value as EmailInboxItem).receivedDateTime === "string" &&
-    typeof (value as EmailInboxItem).subject === "string" &&
-    Array.isArray((value as EmailInboxItem).labels) &&
-    (value as EmailInboxItem).labels.every((l) => typeof l === "string") &&
-    ((value as EmailInboxItem).identifiedAction === undefined ||
-      ((value as EmailInboxItem).identifiedAction !== null &&
-        typeof (value as EmailInboxItem).identifiedAction === "object" &&
-        ((value as EmailInboxItem).identifiedAction as { state?: string }).state ===
-          ("proposed" satisfies EmailActionState) ||
-        ((value as EmailInboxItem).identifiedAction as { state?: string }).state ===
-          ("confirmed" satisfies EmailActionState)))
+    typeof row.id === "string" &&
+    typeof row.receivedDateTime === "string" &&
+    typeof row.subject === "string" &&
+    Array.isArray(row.labels) &&
+    row.labels.every((l) => typeof l === "string") &&
+    (action === undefined ||
+      (action !== null &&
+        typeof action === "object" &&
+        (action.state === ("proposed" satisfies EmailActionState) ||
+          action.state === ("confirmed" satisfies EmailActionState)) &&
+        typeof action.actionPhrase === "string" &&
+        action.actionPhrase.trim() !== "" &&
+        (action.actionType === undefined || typeof action.actionType === "string")))
   );
 }
 
