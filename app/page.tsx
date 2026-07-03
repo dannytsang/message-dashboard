@@ -70,14 +70,29 @@ export default async function SummaryPage() {
   // Items derived from email source snapshot (specs 007/008)
   if (emailMode === "blob" && emailSnapshot) {
     for (const item of emailSnapshot.items) {
+      // Build a safe dashboard summary from the real email data:
+      // - action phrase as the primary context line when present
+      // - receivedDateTime as updatedAt so the sort is by email recency
+      // - labels folded into metadata alongside action state/type when available
+      const actionContext = item.identifiedAction?.actionPhrase ?? null;
+      const emailMetadata: Record<string, string | null> = {
+        labels: item.labels.join(", "),
+      };
+      if (item.identifiedAction) {
+        emailMetadata.actionState = item.identifiedAction.state;
+        if (item.identifiedAction.actionType) {
+          emailMetadata.actionType = item.identifiedAction.actionType;
+        }
+      }
+
       mergedItems.push({
         id: item.id,
         source: "email",
         status: item.identifiedAction?.state === "confirmed" ? "open" : "uncertain_needs_review",
         title: item.subject,
-        context: "",
+        context: actionContext ?? "",
         updatedAt: item.receivedDateTime,
-        metadata: { labels: item.labels.join(", ") },
+        metadata: emailMetadata,
       });
     }
   }
