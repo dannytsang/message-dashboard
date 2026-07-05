@@ -18,7 +18,7 @@ import styles from "@/app/whatsapp/whatsapp.module.css";
 
 interface WhatsAppDashboardPageProps {
   snapshot: WhatsAppDashboardSnapshot;
-  dataMode: "blob" | "fixture-fallback";
+  dataMode: "live" | "demo";
 }
 
 interface ConversationBucket {
@@ -289,7 +289,7 @@ export default function WhatsAppDashboardPage({
     : [];
 
   const subtitle = `${snapshot.monitored.length + snapshot.drafts.length} tracked conversation views · ${snapshot.followUps.length} active follow-ups · ${
-    dataMode === "blob" ? "server snapshot" : "fictional fixture fallback"
+    dataMode === "live" ? "server snapshot" : "fictional demo data"
   }`;
 
   return (

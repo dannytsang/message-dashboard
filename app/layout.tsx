@@ -7,6 +7,8 @@ export const metadata: Metadata = {
   description: "Unified communication monitoring for Danny — email and WhatsApp action tracking.",
 };
 
+// NOTE: Navigation is rendered per-page (not here) so it receives the correct
+// per-request effective mode from each page's server component.
 export default function RootLayout({
   children,
 }: {
@@ -14,10 +16,7 @@ export default function RootLayout({
 }) {
   return (
     <html lang="en">
-      <body>
-        <Navigation />
-        {children}
-      </body>
+      <body>{children}</body>
     </html>
   );
 }

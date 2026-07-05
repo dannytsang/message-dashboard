@@ -1,8 +1,11 @@
 import PageClient from "@/app/page-client";
+import Navigation from "@/components/Navigation";
 import {
+  getEffectiveRenderMode,
   readEmailSourceSnapshot,
   readWhatsAppSourceSnapshot,
 } from "@/lib/dashboard-data";
+import { getSiteMode } from "@/lib/site-mode";
 import type {
   CommunicationItem,
   WhatsAppConversationItem,
@@ -17,11 +20,19 @@ import type {
  * No Blob list(), no sync/write calls, no raw credentials.
  */
 export default async function HomePage() {
+  const { mode: topLevelMode } = getSiteMode();
+
   // Read both sources independently — partial availability is handled per-source
   const [emailResult, whatsappResult] = await Promise.all([
-    readEmailSourceSnapshot(),
-    readWhatsAppSourceSnapshot(),
+    readEmailSourceSnapshot(topLevelMode),
+    readWhatsAppSourceSnapshot(topLevelMode),
   ]);
+
+  // Spec 010 FR-004: if ANY source fell back to demo, the whole site renders as demo
+  const effectiveMode = getEffectiveRenderMode(
+    emailResult.mode,
+    whatsappResult.mode,
+  );
 
   // Derive merged communication items from available snapshots
   const mergedItems: CommunicationItem[] = [];
@@ -121,7 +132,9 @@ export default async function HomePage() {
     : undefined;
 
   return (
-    <PageClient
+    <>
+      <Navigation effectiveModeOverride={effectiveMode} />
+      <PageClient
       allItems={mergedItems}
       whatsappCount={whatsappCount}
       emailCount={emailCount}
@@ -132,6 +145,7 @@ export default async function HomePage() {
       whatsappWarning={whatsappResult.warning}
       emailWarning={emailResult.warning}
     />
+    </>
   );
 }
 

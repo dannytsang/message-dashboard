@@ -1,11 +1,8 @@
 import "server-only";
 
-import {
-  dashboardFixtureSnapshot,
-  emailInboxFixtureItems,
-  whatsappDashboardFixtureSnapshot,
-} from "@/lib/dashboard-fixtures";
+import { dashboardDemoSnapshot, emailDemoSourceSnapshot, whatsappDemoSourceSnapshot } from "@/lib/demo";
 import { VercelBlobStorageClient } from "@/lib/blob-storage";
+import { getSiteMode, type DashboardSiteMode } from "@/lib/site-mode";
 import type {
   CommunicationItem,
   CommunicationSource,
@@ -39,7 +36,7 @@ const WHATSAPP_DASHBOARD_URL_ENV = "COMMUNICATION_WHATSAPP_DASHBOARD_URL";
 const EMAIL_SOURCE_BLOB_PATH = "dashboard/v1/email/latest.json";
 const WHATSAPP_SOURCE_BLOB_PATH = "dashboard/v1/whatsapp/latest.json";
 
-export type DashboardDataMode = "blob" | "fixture-fallback";
+export type DashboardDataMode = DashboardSiteMode;
 
 interface DashboardReadResult {
   mode: DashboardDataMode;
@@ -528,7 +525,16 @@ function buildSummary(snapshot: DashboardSnapshotV1): DashboardSnapshotV1["summa
   };
 }
 
-export async function readDashboardSnapshot(): Promise<DashboardReadResult> {
+export async function readDashboardSnapshot(
+  siteMode: DashboardSiteMode = getSiteMode().mode,
+): Promise<DashboardReadResult> {
+  if (siteMode === "demo") {
+    return {
+      mode: "demo",
+      snapshot: dashboardDemoSnapshot,
+    };
+  }
+
   const snapshotUrl = process.env[DASHBOARD_SNAPSHOT_URL_ENV];
 
   if (snapshotUrl) {
@@ -539,7 +545,7 @@ export async function readDashboardSnapshot(): Promise<DashboardReadResult> {
       }
 
       return {
-        mode: "blob",
+        mode: "live",
         snapshot: {
           ...payload,
           summary: payload.summary ?? buildSummary(payload),
@@ -547,11 +553,8 @@ export async function readDashboardSnapshot(): Promise<DashboardReadResult> {
       };
     } catch (error) {
       return {
-        mode: "fixture-fallback",
-        snapshot: {
-          ...dashboardFixtureSnapshot,
-          summary: dashboardFixtureSnapshot.summary ?? buildSummary(dashboardFixtureSnapshot),
-        },
+        mode: "demo",
+        snapshot: dashboardDemoSnapshot,
         warning:
           error instanceof Error
             ? `Falling back to fictional dashboard fixtures because the server snapshot could not be read: ${error.message}`
@@ -561,21 +564,24 @@ export async function readDashboardSnapshot(): Promise<DashboardReadResult> {
   }
 
   return {
-    mode: "fixture-fallback",
-    snapshot: {
-      ...dashboardFixtureSnapshot,
-      summary: dashboardFixtureSnapshot.summary ?? buildSummary(dashboardFixtureSnapshot),
-    },
+    mode: "demo",
+    snapshot: dashboardDemoSnapshot,
   };
 }
 
-export async function readEmailSourceSnapshot(): Promise<EmailSourceReadResult> {
+export async function readEmailSourceSnapshot(
+  siteMode: DashboardSiteMode = getSiteMode().mode,
+): Promise<EmailSourceReadResult> {
+  if (siteMode === "demo") {
+    return { mode: "demo", snapshot: emailDemoSourceSnapshot };
+  }
+
   const text = await readBlobText(EMAIL_SOURCE_BLOB_PATH);
   // Treat null (not found), empty, or whitespace-only as unavailable
   if (text === null || text.trim() === "") {
     return {
-      mode: "fixture-fallback",
-      snapshot: null,
+      mode: "demo",
+      snapshot: emailDemoSourceSnapshot,
       warning: "Email snapshot unavailable; falling back to fictional inbox fixtures.",
     };
   }
@@ -583,18 +589,18 @@ export async function readEmailSourceSnapshot(): Promise<EmailSourceReadResult> 
     const payload = JSON.parse(text);
     // Try current email-dashboard-source/v1 first
     if (isEmailDashboardSourceSnapshotV1(payload)) {
-      return { mode: "blob", snapshot: payload };
+      return { mode: "live", snapshot: payload };
     }
     // Fall back to legacy email-source/v1 for existing fixtures/blobs
     if (isLegacyEmailSourceSnapshot(payload)) {
       // Re-wrap in legacy shape for backward compat
-      return { mode: "blob", snapshot: payload as unknown as EmailSourceSnapshot };
+      return { mode: "live", snapshot: payload as unknown as EmailSourceSnapshot };
     }
     throw new Error("Email source snapshot did not match expected schema");
   } catch (error) {
     return {
-      mode: "fixture-fallback",
-      snapshot: null,
+      mode: "demo",
+      snapshot: emailDemoSourceSnapshot,
       warning:
         error instanceof Error
           ? `Email snapshot malformed; falling back to fictional inbox fixtures: ${error.message}`
@@ -608,12 +614,18 @@ export async function readEmailSourceSnapshot(): Promise<EmailSourceReadResult> 
  * Falls back to null + warning when missing/malformed; callers must handle fixture
  * substitution if they choose to fall back further (e.g. whatsappDashboardFixtureSnapshot).
  */
-export async function readWhatsAppSourceSnapshot(): Promise<WhatsAppSourceReadResult> {
+export async function readWhatsAppSourceSnapshot(
+  siteMode: DashboardSiteMode = getSiteMode().mode,
+): Promise<WhatsAppSourceReadResult> {
+  if (siteMode === "demo") {
+    return { mode: "demo", snapshot: whatsappDemoSourceSnapshot };
+  }
+
   const text = await readBlobText(WHATSAPP_SOURCE_BLOB_PATH);
   if (text === null || text.trim() === "") {
     return {
-      mode: "fixture-fallback",
-      snapshot: null,
+      mode: "demo",
+      snapshot: whatsappDemoSourceSnapshot,
       warning: "WhatsApp snapshot unavailable; no fixture fallback for source reader.",
     };
   }
@@ -622,11 +634,11 @@ export async function readWhatsAppSourceSnapshot(): Promise<WhatsAppSourceReadRe
     if (!isWhatsAppSourceSnapshot(payload)) {
       throw new Error("WhatsApp source snapshot did not match expected schema");
     }
-    return { mode: "blob", snapshot: payload };
+    return { mode: "live", snapshot: payload };
   } catch (error) {
     return {
-      mode: "fixture-fallback",
-      snapshot: null,
+      mode: "demo",
+      snapshot: whatsappDemoSourceSnapshot,
       warning:
         error instanceof Error
           ? `WhatsApp snapshot malformed: ${error.message}`
@@ -635,7 +647,16 @@ export async function readWhatsAppSourceSnapshot(): Promise<WhatsAppSourceReadRe
   }
 }
 
-export async function readEmailInboxItems(): Promise<EmailInboxReadResult> {
+export async function readEmailInboxItems(
+  siteMode: DashboardSiteMode = getSiteMode().mode,
+): Promise<EmailInboxReadResult> {
+  if (siteMode === "demo") {
+    return {
+      mode: "demo",
+      items: emailDemoSourceSnapshot.items.map(formatEmailDashboardRowDisplay),
+    };
+  }
+
   // Priority 1: deterministic blob path (spec 007/008)
   const text = await readBlobText(EMAIL_SOURCE_BLOB_PATH);
   // Treat null (not found), empty, or whitespace-only as unavailable
@@ -644,7 +665,7 @@ export async function readEmailInboxItems(): Promise<EmailInboxReadResult> {
       const payload = JSON.parse(text);
       if (isEmailDashboardSourceSnapshotV1(payload)) {
         return {
-          mode: "blob",
+          mode: "live",
           items: payload.items.map(formatEmailDashboardRowDisplay),
         };
       }
@@ -655,7 +676,7 @@ export async function readEmailInboxItems(): Promise<EmailInboxReadResult> {
         throw new Error("Email items did not match expected shape");
       }
       return {
-        mode: "blob",
+        mode: "live",
         items: payload.items.map(formatEmailInboxDisplay),
       };
     } catch (error) {
@@ -672,13 +693,13 @@ export async function readEmailInboxItems(): Promise<EmailInboxReadResult> {
         throw new Error("Inbox payload did not match the expected email inbox shape");
       }
       return {
-        mode: "blob",
+        mode: "live",
         items: payload.map(formatEmailInboxDisplay),
       };
     } catch (error) {
       return {
-        mode: "fixture-fallback",
-        items: emailInboxFixtureItems.map(formatEmailInboxDisplay),
+        mode: "demo",
+        items: emailDemoSourceSnapshot.items.map(formatEmailDashboardRowDisplay),
         warning:
           error instanceof Error
             ? `Falling back to fictional inbox fixtures because the server inbox snapshot could not be read: ${error.message}`
@@ -688,16 +709,18 @@ export async function readEmailInboxItems(): Promise<EmailInboxReadResult> {
   }
 
   return {
-    mode: "fixture-fallback",
-    items: emailInboxFixtureItems.map(formatEmailInboxDisplay),
+    mode: "demo",
+    items: emailDemoSourceSnapshot.items.map(formatEmailDashboardRowDisplay),
   };
 }
 
-export async function readWhatsAppDashboardData(): Promise<WhatsAppDashboardReadResult> {
-  const sourceResult = await readWhatsAppSourceSnapshot();
+export async function readWhatsAppDashboardData(
+  siteMode: DashboardSiteMode = getSiteMode().mode,
+): Promise<WhatsAppDashboardReadResult> {
+  const sourceResult = await readWhatsAppSourceSnapshot(siteMode);
   if (sourceResult.snapshot) {
     return {
-      mode: "blob",
+      mode: sourceResult.mode,
       snapshot: whatsAppSourceSnapshotToUi(sourceResult.snapshot),
       warning: sourceResult.warning,
     };
@@ -713,13 +736,13 @@ export async function readWhatsAppDashboardData(): Promise<WhatsAppDashboardRead
       }
 
       return {
-        mode: "blob",
+        mode: "live",
         snapshot: payload,
       };
     } catch (error) {
       return {
-        mode: "fixture-fallback",
-        snapshot: whatsappDashboardFixtureSnapshot,
+        mode: "demo",
+        snapshot: whatsAppSourceSnapshotToUi(whatsappDemoSourceSnapshot),
         warning:
           error instanceof Error
             ? `Falling back to fictional WhatsApp fixtures because the server snapshot could not be read: ${error.message}`
@@ -729,10 +752,25 @@ export async function readWhatsAppDashboardData(): Promise<WhatsAppDashboardRead
   }
 
   return {
-    mode: "fixture-fallback",
-    snapshot: whatsappDashboardFixtureSnapshot,
+    mode: "demo",
+    snapshot: whatsAppSourceSnapshotToUi(whatsappDemoSourceSnapshot),
     warning: sourceResult.warning,
   };
+}
+
+/**
+ * Returns the effective render mode for a page.
+ *
+ * Per spec 010 FR-004: if ANY source reader falls back to demo for the current
+ * render context, the whole page (and site) renders as demo.
+ *
+ * Call this after reading all sources for a page and pass the result to
+ * the shared shell via getShellModeState(effectiveMode).
+ */
+export function getEffectiveRenderMode(
+  ...readModes: Array<"live" | "demo">
+): "live" | "demo" {
+  return readModes.some((m) => m === "demo") ? "demo" : "live";
 }
 
 
