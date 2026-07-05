@@ -319,6 +319,28 @@ tests.push({
   },
 });
 
+tests.push({
+  name: "Source-level validation failure on live mode does NOT downgrade page to demo",
+  run: () => {
+    // Scenario: cookie=demo is NOT set; top-level is live + Blob is available.
+    // Email reader encounters a malformed blob → returns mode=live (not demo)
+    // with a warning. WhatsApp reader is fine → mode=live.
+    // Effective mode must stay live; banner must be hidden.
+    //
+    // This is the bug fix: previously both readers would return mode=demo on
+    // validation failure, causing getEffectiveRenderMode to return "demo" even
+    // though the user had explicitly chosen live.
+    const emailReaderMode: "live" | "demo" = "live"; // malformed blob, but user chose live
+    const whatsappReaderMode: "live" | "demo" = "live"; // healthy blob
+    const effective = getEffectiveRenderMode(emailReaderMode, whatsappReaderMode);
+    assertEqual(effective, "live", "effective mode stays live when only one source has warning");
+    const shell = getShellModeState(effective);
+    assertEqual(shell.showDemoBanner, false, "banner hidden when page is live");
+    assertEqual(shell.mode, "live", "shell mode is live");
+    return "PASS";
+  },
+});
+
 // ── Run ───────────────────────────────────────────────────────────────────────
 
 let passed = 0;

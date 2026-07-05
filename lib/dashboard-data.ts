@@ -598,13 +598,16 @@ export async function readEmailSourceSnapshot(
     }
     throw new Error("Email source snapshot did not match expected schema");
   } catch (error) {
+    // When the user explicitly chose live and Blob is available, a per-source
+    // validation failure must NOT silently downgrade the whole page to demo.
+    // Surface a warning and return null snapshot instead; the page stays live.
     return {
-      mode: "demo",
-      snapshot: emailDemoSourceSnapshot,
+      mode: "live",
+      snapshot: null,
       warning:
         error instanceof Error
-          ? `Email snapshot malformed; falling back to fictional inbox fixtures: ${error.message}`
-          : "Email snapshot malformed; falling back to fictional inbox fixtures.",
+          ? `Email snapshot malformed: ${error.message}`
+          : "Email snapshot malformed.",
     };
   }
 }
@@ -636,9 +639,12 @@ export async function readWhatsAppSourceSnapshot(
     }
     return { mode: "live", snapshot: payload };
   } catch (error) {
+    // When the user explicitly chose live and Blob is available, a per-source
+    // validation failure must NOT silently downgrade the whole page to demo.
+    // Surface a warning and return null snapshot instead; the page stays live.
     return {
-      mode: "demo",
-      snapshot: whatsappDemoSourceSnapshot,
+      mode: "live",
+      snapshot: null,
       warning:
         error instanceof Error
           ? `WhatsApp snapshot malformed: ${error.message}`
