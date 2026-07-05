@@ -1,9 +1,8 @@
 /**
- * Demo mode toggle — operator UI for switching between live and demo data.
- * The cookie is authoritative; this component is the user-facing affordance
- * for that server-side override (spec 010 FR-003).
+ * Shared navigation shell. The user menu (rendered via SessionSurface →
+ * UserMenu) carries the authenticated-only demo-mode toggle. Sign out remains
+ * the last item in that menu.
  */
-import DemoModeToggle from "@/components/DemoModeToggle";
 import NavigationClient from "@/components/NavigationClient";
 import { getSessionDisplayName } from "@/lib/auth";
 import { getOptionalServerSession } from "@/lib/auth-helpers";

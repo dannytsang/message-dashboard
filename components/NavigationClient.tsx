@@ -2,7 +2,6 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import DemoModeToggle from "@/components/DemoModeToggle";
 import SessionSurface from "./SessionSurface";
 import styles from "./Navigation.module.css";
 
@@ -53,15 +52,11 @@ export default function NavigationClient({
             })}
           </ul>
 
-          {/* Demo mode toggle — only for authenticated users, hidden from fixtures */}
-          {isAuthenticated && (
-            <DemoModeToggle currentMode={currentMode} />
-          )}
-
           <div className={styles.sessionActions}>
             <SessionSurface
               displayName={displayName}
               signOutEnabled={isAuthenticated}
+              currentMode={currentMode}
             />
           </div>
         </div>

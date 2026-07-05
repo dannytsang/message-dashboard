@@ -7,11 +7,14 @@ import styles from "./SessionSurface.module.css";
 interface SessionSurfaceProps {
   displayName: string;
   signOutEnabled?: boolean;
+  /** Current effective mode for this user, injected by the server component. */
+  currentMode?: "live" | "demo";
 }
 
 export default function SessionSurface({
   displayName,
   signOutEnabled = false,
+  currentMode,
 }: SessionSurfaceProps) {
   const [isOpen, setIsOpen] = useState(false);
   const triggerRef = useRef<HTMLButtonElement>(null);
@@ -60,6 +63,7 @@ export default function SessionSurface({
           displayName={displayName}
           menuId={menuId}
           signOutEnabled={signOutEnabled}
+          currentMode={currentMode}
           onClose={() => {
             setIsOpen(false);
             triggerRef.current?.focus();
