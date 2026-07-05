@@ -1,3 +1,9 @@
+/**
+ * Demo mode toggle — operator UI for switching between live and demo data.
+ * The cookie is authoritative; this component is the user-facing affordance
+ * for that server-side override (spec 010 FR-003).
+ */
+import DemoModeToggle from "@/components/DemoModeToggle";
 import NavigationClient from "@/components/NavigationClient";
 import { getSessionDisplayName } from "@/lib/auth";
 import { getOptionalServerSession } from "@/lib/auth-helpers";
@@ -31,6 +37,7 @@ export default async function Navigation({ effectiveModeOverride }: NavigationPr
       <NavigationClient
         displayName={getSessionDisplayName(session?.user)}
         isAuthenticated={Boolean(session)}
+        currentMode={shellMode.mode}
       />
     </>
   );

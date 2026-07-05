@@ -4,14 +4,16 @@
  * One authoritative mode for the whole site, computed server-side at render time.
  * Never derived from browser-side logic.
  *
- * Rules:
- *  - 'demo' when VERCEL_ENV !== 'production'          (preview deployment)
- *  - 'demo' when BLOB_READ_WRITE_TOKEN is absent         (blob unavailable)
- *  - 'demo' when FORCE_DEMO_MODE env flag is set         (development override)
- *  - 'live' only when none of the above triggers apply
+ * Triggers (any one activates demo mode):
+ *  - BLOB_READ_WRITE_TOKEN / VERCEL_BLOB_READ_WRITE_TOKEN missing or empty  (blob unavailable)
+ *  - FORCE_DEMO_MODE env flag is set                                          (operator override)
+ *  - user has set the demo-mode cookie (`dashboard-demo-mode=demo`)            (authenticated toggle)
+ *
+ * Live mode when: Blob is available AND FORCE_DEMO_MODE is not set AND cookie is not `demo`.
  */
 
 import "server-only";
+import { cookies } from "next/headers";
 
 // ── Public types (data-contracts.md) ──────────────────────────────────────────
 
@@ -23,7 +25,7 @@ export interface DashboardSiteModeDecision {
    * Human-readable reasons why demo mode is active.
    * Empty when mode === 'live'.
    */
-  reasons: Array<"preview" | "blob_unavailable">;
+  reasons: Array<"blob_unavailable">;
 }
 
 /**
@@ -38,30 +40,73 @@ export interface DashboardShellModeState {
 // ── Detection helpers ──────────────────────────────────────────────────────────
 
 /**
- * True when the current runtime environment is a Vercel preview deployment.
- * Uses the same signal already used by the platform.
- */
-function isPreviewDeployment(): boolean {
-  const env = process.env.VERCEL_ENV;
-  return typeof env === "string" && env !== "production";
-}
-
-/**
  * True when Blob-backed data capability is unavailable.
  * Credentials are absent or explicitly disabled.
  */
-function isForceDemoModeEnabled(): boolean {
-  const value = process.env.FORCE_DEMO_MODE;
-  return typeof value === "string" && ["1", "true", "yes", "on"].includes(value.trim().toLowerCase());
-}
-
 function isBlobUnavailable(): boolean {
   const token = process.env.BLOB_READ_WRITE_TOKEN ?? process.env.VERCEL_BLOB_READ_WRITE_TOKEN;
   // Treat empty string or missing token as unavailable
   return !token || token.trim() === "";
 }
 
-// ── Core decision ──────────────────────────────────────────────────────────────
+/**
+ * True when the operator has set FORCE_DEMO_MODE to a truthy value.
+ */
+function isForceDemoModeEnabled(): boolean {
+  const value = process.env.FORCE_DEMO_MODE;
+  return typeof value === "string" && ["1", "true", "yes", "on"].includes(value.trim().toLowerCase());
+}
+
+// ── Cookie authority (server-only) ─────────────────────────────────────────────
+
+const DEMO_MODE_COOKIE = "dashboard-demo-mode";
+
+/**
+ * Reads the dashboard-demo-mode cookie from the incoming request.
+ * Returns the cookie value lowercased, or null if absent/invalid.
+ *
+ * Must only be called in trusted server-side code.
+ */
+function readDemoModeCookie(): "demo" | "live" | null {
+  try {
+    const cookieStore = cookies();
+    const entry = cookieStore.get(DEMO_MODE_COOKIE);
+    const value = entry?.value;
+    if (value === "demo" || value === "live") {
+      return value;
+    }
+    return null;
+  } catch {
+    // cookies() throws outside of a request context (e.g. at module initialisation)
+    return null;
+  }
+}
+
+/**
+ * Applies the user's cookie override to the runtime-decided top-level mode.
+ *
+ * Rules (spec 010 FR-003):
+ * - cookie "demo" → demo regardless of runtime triggers
+ * - cookie "live" → live ONLY if Blob is available; otherwise silently falls back to demo
+ * - cookie absent/invalid → runtime-decided mode is used
+ */
+function applyUserOverride(
+  topLevelMode: DashboardSiteMode,
+  userOverride: "demo" | "live" | null,
+  blobUnavailable: boolean,
+): DashboardSiteMode {
+  if (userOverride === "demo") {
+    return "demo";
+  }
+  if (userOverride === "live") {
+    // "live" cookie is honoured only when Blob is available (safe-fallback guard)
+    return blobUnavailable ? "demo" : "live";
+  }
+  // null → no override
+  return topLevelMode;
+}
+
+// ── Core decision ─────────────────────────────────────────────────────────────
 
 /**
  * Returns the authoritative site-wide mode decision for the current runtime.
@@ -69,18 +114,20 @@ function isBlobUnavailable(): boolean {
  * Made in trusted server-side logic so the browser never guesses.
  */
 export function getSiteMode(): DashboardSiteModeDecision {
-  const reasons: Array<"preview" | "blob_unavailable"> = [];
+  const reasons: Array<"blob_unavailable"> = [];
   const forceDemo = isForceDemoModeEnabled();
+  const blobUnavailable = isBlobUnavailable();
 
-  if (isPreviewDeployment()) {
-    reasons.push("preview");
-  }
-
-  if (isBlobUnavailable()) {
+  if (blobUnavailable) {
     reasons.push("blob_unavailable");
   }
 
-  const mode: DashboardSiteMode = forceDemo || reasons.length > 0 ? "demo" : "live";
+  const runtimeMode: DashboardSiteMode =
+    forceDemo || blobUnavailable ? "demo" : "live";
+
+  // Apply cookie override in trusted server-side context
+  const userOverride = readDemoModeCookie();
+  const mode = applyUserOverride(runtimeMode, userOverride, blobUnavailable);
 
   return { mode, reasons };
 }

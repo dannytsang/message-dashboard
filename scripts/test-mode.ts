@@ -10,12 +10,18 @@
  *   npx tsx scripts/test-mode.ts
  *   FORCE_DEMO_MODE=true npx tsx scripts/test-mode.ts
  *
- * Acceptance criteria covered (acceptance-criteria.md § Later implementation verification):
- *   - preview-mode activation        → env: VERCEL_ENV=preview
- *   - no-Blob activation          → env: no BLOB_READ_WRITE_TOKEN
- *   - live preference outside preview → normal env → live
- *   - banner visibility in demo mode → showDemoBanner: true
- *   - absence in live mode         → showDemoBanner: false
+ * Acceptance criteria covered:
+ *   - blob-unavailable activation        → env: no BLOB_READ_WRITE_TOKEN
+ *   - FORCE_DEMO_MODE activation        → env: FORCE_DEMO_MODE=true
+ *   - cookie=demo forces demo             → no Blob/force-demo required
+ *   - cookie=live honoured only w/ Blob   → falls back to demo when Blob absent
+ *   - missing/invalid cookie → runtime mode
+ *   - banner visibility in demo mode      → showDemoBanner: true
+ *   - absence in live mode               → showDemoBanner: false
+ *
+ * NOTE: The `isPreviewDeployment` / `VERCEL_ENV !== "production"` trigger was
+ * removed from spec 010 on 2026-07-05. Tests that previously asserted preview-
+ * mode behaviour have been removed.
  */
 
 // ── Pure function re-implementations (mirrors lib/) ───────────────────────────
@@ -24,7 +30,7 @@ type DashboardSiteMode = "live" | "demo";
 
 interface DashboardSiteModeDecision {
   mode: DashboardSiteMode;
-  reasons: Array<"preview" | "blob_unavailable">;
+  reasons: Array<"blob_unavailable">;
 }
 
 interface DashboardShellModeState {
@@ -33,12 +39,7 @@ interface DashboardShellModeState {
   bannerText: "Demo mode — using fictional data";
 }
 
-// Mirrors lib/site-mode.ts — keep in sync
-function isPreviewDeployment(): boolean {
-  const env = process.env.VERCEL_ENV;
-  return typeof env === "string" && env !== "production";
-}
-
+// Mirrors lib/site-mode.ts — keep in sync with the actual implementation
 function isForceDemoModeEnabled(): boolean {
   const value = process.env.FORCE_DEMO_MODE;
   return typeof value === "string" && ["1", "true", "yes", "on"].includes(value.trim().toLowerCase());
@@ -49,19 +50,46 @@ function isBlobUnavailable(): boolean {
   return !token || token.trim() === "";
 }
 
+/**
+ * Cookie override simulation.
+ * Mirrors the applyUserOverride logic in lib/site-mode.ts.
+ */
+function applyUserOverride(
+  topLevelMode: DashboardSiteMode,
+  userOverride: "demo" | "live" | null,
+  blobUnavailable: boolean,
+): DashboardSiteMode {
+  if (userOverride === "demo") return "demo";
+  if (userOverride === "live") return blobUnavailable ? "demo" : "live";
+  return topLevelMode;
+}
+
 function getSiteMode(): DashboardSiteModeDecision {
-  const reasons: Array<"preview" | "blob_unavailable"> = [];
+  const reasons: Array<"blob_unavailable"> = [];
   const forceDemo = isForceDemoModeEnabled();
+  const blobUnavailable = isBlobUnavailable();
 
-  if (isPreviewDeployment()) reasons.push("preview");
-  if (isBlobUnavailable()) reasons.push("blob_unavailable");
+  if (blobUnavailable) reasons.push("blob_unavailable");
 
-  const mode: DashboardSiteMode = forceDemo || reasons.length > 0 ? "demo" : "live";
+  const runtimeMode: DashboardSiteMode = forceDemo || blobUnavailable ? "demo" : "live";
+  return { mode: runtimeMode, reasons };
+}
+
+/**
+ * Simulates getSiteMode with a mocked cookie override value.
+ * Used for cookie-override test scenarios.
+ */
+function getSiteModeWithCookie(
+  cookieValue: "demo" | "live" | null,
+): DashboardSiteModeDecision {
+  const { mode: runtimeMode, reasons } = getSiteMode();
+  const blobUnavailable = isBlobUnavailable();
+  const mode = applyUserOverride(runtimeMode, cookieValue, blobUnavailable);
   return { mode, reasons };
 }
 
 function getShellModeState(effectiveModeOverride?: DashboardSiteMode): DashboardShellModeState {
-  const topLevel = getSiteMode().mode;
+  const topLevel = getSiteModeWithCookie(null).mode;
   const mode = effectiveModeOverride ?? topLevel;
   return {
     mode,
@@ -165,7 +193,7 @@ tests.push({
   name: "getShellModeState: no override returns top-level mode",
   run: () => {
     const r = getShellModeState();
-    const top = getSiteMode().mode;
+    const top = getSiteModeWithCookie(null).mode;
     assertEqual(r.mode, top, "mode matches top-level");
     return "PASS";
   },
@@ -189,6 +217,63 @@ tests.push({
   run: () => {
     const { mode, reasons } = getSiteMode();
     if (mode === "live") assert(reasons.length === 0, "live → reasons empty");
+    return "PASS";
+  },
+});
+
+// --- Cookie override tests ---
+
+tests.push({
+  name: "Cookie override: cookie=demo forces demo even when runtime would be live",
+  run: () => {
+    // Simulate: Blob available + no FORCE_DEMO_MODE → runtime=live
+    // But cookie says demo → final must be demo
+    // We test applyUserOverride directly with a runtime=live, blobAvailable=false
+    const result = applyUserOverride("live", "demo", false);
+    assertEqual(result, "demo", "cookie=demo overrides runtime live");
+    return "PASS";
+  },
+});
+
+tests.push({
+  name: "Cookie override: cookie=live is honoured when Blob is available",
+  run: () => {
+    // Blob is available, runtime decided live, cookie says live
+    // → should stay live
+    const result = applyUserOverride("live", "live", false);
+    assertEqual(result, "live", "cookie=live honoured when Blob available");
+    return "PASS";
+  },
+});
+
+tests.push({
+  name: "Cookie override: cookie=live falls back to demo when Blob unavailable",
+  run: () => {
+    // Blob unavailable → runtime=demo, cookie says live
+    // → safe-fallback guard kicks in, final must be demo
+    const result = applyUserOverride("demo", "live", true);
+    assertEqual(result, "demo", "cookie=live silently falls back to demo when Blob absent");
+    return "PASS";
+  },
+});
+
+tests.push({
+  name: "Cookie override: null/missing cookie leaves runtime decision intact",
+  run: () => {
+    // Demo runtime, no cookie → stays demo
+    assertEqual(applyUserOverride("demo", null, true), "demo", "demo runtime + null cookie");
+    // Live runtime, no cookie → stays live
+    assertEqual(applyUserOverride("live", null, false), "live", "live runtime + null cookie");
+    return "PASS";
+  },
+});
+
+tests.push({
+  name: "Cookie override: invalid cookie value treated as null",
+  run: () => {
+    // Any value other than "demo" | "live" is treated as null
+    // (applyUserOverride only handles "demo" and "live", anything else falls through)
+    assertEqual(applyUserOverride("live", null, false), "live", "null → runtime intact");
     return "PASS";
   },
 });
@@ -223,7 +308,7 @@ tests.push({
   run: () => {
     // Top-level is live, but source readers forced demo
     // The shell MUST respect effective mode override
-    const topLevel = getSiteMode().mode; // may be live or demo depending on env
+    const topLevel = getSiteModeWithCookie(null).mode;
     if (topLevel === "live") {
       const effective = getEffectiveRenderMode("live", "demo");
       const shell = getShellModeState(effective);

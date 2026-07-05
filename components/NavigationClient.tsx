@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import DemoModeToggle from "@/components/DemoModeToggle";
 import SessionSurface from "./SessionSurface";
 import styles from "./Navigation.module.css";
 
@@ -14,11 +15,14 @@ const navItems = [
 interface NavigationClientProps {
   displayName: string;
   isAuthenticated: boolean;
+  /** Current effective mode for this user, injected by the server component. */
+  currentMode: "live" | "demo";
 }
 
 export default function NavigationClient({
   displayName,
   isAuthenticated,
+  currentMode,
 }: NavigationClientProps) {
   const pathname = usePathname();
 
@@ -48,6 +52,11 @@ export default function NavigationClient({
               );
             })}
           </ul>
+
+          {/* Demo mode toggle — only for authenticated users, hidden from fixtures */}
+          {isAuthenticated && (
+            <DemoModeToggle currentMode={currentMode} />
+          )}
 
           <div className={styles.sessionActions}>
             <SessionSurface
