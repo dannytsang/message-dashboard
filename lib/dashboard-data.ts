@@ -11,6 +11,11 @@ import type {
   CommunicationSource,
   CommunicationStatus,
   DashboardSnapshotV1,
+  EmailDashboardIdentifiedActionV1,
+  EmailDashboardRowV1,
+  EmailDashboardSourceMetadataV1,
+  EmailDashboardSourceSnapshotV1,
+  EmailDashboardSummaryV1,
   EmailInboxDisplayItem,
   EmailInboxItem,
   WhatsAppConversationItem,
@@ -109,7 +114,66 @@ function isEmailInboxItem(value: unknown): value is EmailInboxItem {
   );
 }
 
-function isEmailSourceSnapshot(value: unknown): value is EmailSourceSnapshot {
+function isEmailDashboardSourceSnapshotV1(
+  value: unknown,
+): value is EmailDashboardSourceSnapshotV1 {
+  if (!isRecord(value)) return false;
+  if (value.schemaVersion !== "email-dashboard-source/v1") return false;
+  if (value.source !== "email") return false;
+  if (value.sourcePath !== "dashboard/v1/email/latest.json") return false;
+  if (typeof value.dataGeneratedAt !== "string") return false;
+  if (typeof value.inboxQuery !== "string") return false;
+  if (!Array.isArray(value.items)) return false;
+
+  // Validate summary counts
+  const summary = value.summary;
+  if (!isRecord(summary)) return false;
+  if (typeof summary.itemCount !== "number") return false;
+  if (typeof summary.actionCount !== "number") return false;
+  if (typeof summary.proposedCount !== "number") return false;
+  if (typeof summary.confirmedCount !== "number") return false;
+  if (typeof summary.noActionCount !== "number") return false;
+  if (
+    summary.itemCount !==
+    summary.actionCount + summary.noActionCount
+  )
+    return false;
+  if (summary.actionCount !== summary.proposedCount + summary.confirmedCount)
+    return false;
+
+  // Validate rows
+  const rows = value.items as unknown[];
+  for (const row of rows) {
+    if (!isRecord(row)) return false;
+    if (typeof row.id !== "string") return false;
+    if (typeof row.subject !== "string") return false;
+    if (!Array.isArray(row.labels)) return false;
+    if (!row.labels.every((l: unknown) => typeof l === "string")) return false;
+
+    const action = row.identifiedAction;
+    if (action !== undefined) {
+      if (!isRecord(action)) return false;
+      if (action.state !== "proposed" && action.state !== "confirmed")
+        return false;
+      if (typeof action.actionPhrase !== "string") return false;
+      if (
+        action.derivedBy !== undefined &&
+        !(["monitor_inference", "rule", "human_confirmed"] as string[]).includes(
+          action.derivedBy as string,
+        )
+      )
+        return false;
+    }
+  }
+
+  return true;
+}
+
+/**
+ * Legacy email source snapshot validator (email-source/v1 with generatedAt).
+ * Used only for backward compatibility with existing blob fixtures.
+ */
+function isLegacyEmailSourceSnapshot(value: unknown): boolean {
   return (
     isRecord(value) &&
     typeof value.generatedAt === "string" &&
@@ -117,12 +181,10 @@ function isEmailSourceSnapshot(value: unknown): value is EmailSourceSnapshot {
   );
 }
 
-export interface EmailSourceSnapshot {
-  schemaVersion?: string;
-  generatedAt: string;
-  summary?: Record<string, unknown> | null;
-  items: EmailInboxItem[];
-}
+/**
+ * Current email source snapshot (specs 012/007/008).
+ */
+export type EmailSourceSnapshot = EmailDashboardSourceSnapshotV1;
 
 export interface WhatsAppSourceSnapshot {
   schemaVersion?: string;
@@ -343,10 +405,16 @@ export async function readEmailSourceSnapshot(): Promise<EmailSourceReadResult> 
   }
   try {
     const payload = JSON.parse(text);
-    if (!isEmailSourceSnapshot(payload)) {
-      throw new Error("Email source snapshot did not match expected schema");
+    // Try current email-dashboard-source/v1 first
+    if (isEmailDashboardSourceSnapshotV1(payload)) {
+      return { mode: "blob", snapshot: payload };
     }
-    return { mode: "blob", snapshot: payload };
+    // Fall back to legacy email-source/v1 for existing fixtures/blobs
+    if (isLegacyEmailSourceSnapshot(payload)) {
+      // Re-wrap in legacy shape for backward compat
+      return { mode: "blob", snapshot: payload as unknown as EmailSourceSnapshot };
+    }
+    throw new Error("Email source snapshot did not match expected schema");
   } catch (error) {
     return {
       mode: "fixture-fallback",
@@ -398,7 +466,7 @@ export async function readEmailInboxItems(): Promise<EmailInboxReadResult> {
   if (text !== null && text.trim() !== "") {
     try {
       const payload = JSON.parse(text);
-      if (!isEmailSourceSnapshot(payload)) {
+      if (!isLegacyEmailSourceSnapshot(payload)) {
         throw new Error("Email source snapshot did not match expected schema");
       }
       if (!payload.items.every(isEmailInboxItem)) {

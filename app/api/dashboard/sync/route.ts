@@ -93,12 +93,7 @@ function isEmailInboxItem(value: unknown): value is EmailInboxItem {
   );
 }
 
-function validateEmailPayload(body: Record<string, unknown>): body is {
-  source: "email";
-  items: EmailInboxItem[];
-  summary?: Record<string, unknown>;
-  dataGeneratedAt: string;
-} {
+function validateEmailPayload(body: Record<string, unknown>): boolean {
   return (
     typeof body.dataGeneratedAt === "string" &&
     Array.isArray(body.items) &&
@@ -220,14 +215,44 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
   // Validate source-specific payload; malformed data affects only that source (spec 008 FR-003)
   let snapshotContent: string;
   if (source === "email") {
+    // Read metadata before type narrowing (narrowing excludes unknown keys)
+    const incomingMetadata = b.metadata as
+      | Record<string, unknown>
+      | undefined;
     if (!validateEmailPayload(b)) {
       return NextResponse.json({ error: "Invalid payload" }, { status: 400 });
     }
+    // Build email snapshot using the current email-dashboard-source/v1 schema (specs 012/008)
+    const incomingItems = b.items as EmailInboxItem[];
+    const incomingSummary = b.summary as
+      | { itemCount?: number; actionCount?: number }
+      | undefined;
     const snapshot = {
-      schemaVersion: "email-source/v1",
-      generatedAt: b.dataGeneratedAt as string,
-      summary: (b.summary as Record<string, unknown>) ?? null,
-      items: b.items as EmailInboxItem[],
+      schemaVersion: "email-dashboard-source/v1",
+      source: "email" as const,
+      sourcePath: "dashboard/v1/email/latest.json",
+      dataGeneratedAt: b.dataGeneratedAt as string,
+      inboxQuery:
+        typeof b.inboxQuery === "string" ? b.inboxQuery : "in:inbox -in:snoozed",
+      items: incomingItems,
+      summary: incomingSummary ?? {
+        itemCount: incomingItems.length,
+        actionCount: incomingItems.filter((i) => i.identifiedAction != null).length,
+      },
+      metadata: {
+        ...(incomingMetadata?.snapshotHash != null && {
+          snapshotHash: String(incomingMetadata.snapshotHash),
+        }),
+        ...(incomingMetadata?.publisher != null && {
+          publisher: String(incomingMetadata.publisher),
+        }),
+        ...(incomingMetadata?.sourceRunId != null && {
+          sourceRunId: String(incomingMetadata.sourceRunId),
+        }),
+        ...(incomingMetadata?.skippedWriteBecauseUnchanged === true && {
+          skippedWriteBecauseUnchanged: true,
+        }),
+      },
     };
     snapshotContent = JSON.stringify(snapshot, null, 2);
   } else if (source === "whatsapp") {

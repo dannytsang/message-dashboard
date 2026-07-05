@@ -58,6 +58,102 @@
   font-weight: 600;
 }
 
+/* ── Stat filter buttons (spec 013) ────────────────────────────────────── */
+
+.statButton {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  padding: 9px 15px;
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: 8px;
+  font-family: var(--font-stack);
+  font-size: 0.875rem;
+  color: var(--color-text-secondary);
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.statButton:hover {
+  border-color: var(--color-accent);
+  color: var(--color-text-primary);
+}
+
+.statButtonActive {
+  background: var(--color-accent-dim);
+  border-color: var(--color-accent);
+  color: var(--color-accent);
+}
+
+.statButtonActive strong {
+  color: var(--color-accent);
+}
+
+.waDot {
+  background: #25d366;
+}
+
+.emDot {
+  background: var(--color-accent);
+}
+
+/* ── Filter label + clear ──────────────────────────────────────────────── */
+
+.filterLabel {
+  display: flex;
+  align-items: center;
+  gap: var(--space-sm);
+  font-size: 0.875rem;
+  color: var(--color-text-secondary);
+  margin-bottom: var(--space-md);
+}
+
+.filterClearBtn {
+  display: inline-flex;
+  align-items: center;
+  padding: 4px 12px;
+  background: transparent;
+  border: 1px solid var(--color-border);
+  border-radius: 6px;
+  font-family: var(--font-stack);
+  font-size: 0.8125rem;
+  color: var(--color-text-secondary);
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.filterClearBtn:hover {
+  border-color: var(--color-text-muted);
+  color: var(--color-text-primary);
+}
+
+/* ── Source-level warnings ─────────────────────────────────────────────── */
+
+.sourceWarning {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: var(--space-sm) var(--space-md);
+  background: rgba(249, 115, 22, 0.08);
+  border: 1px solid rgba(249, 115, 22, 0.2);
+  border-radius: var(--radius);
+  margin-bottom: var(--space-md);
+  font-size: 0.875rem;
+}
+
+.sourceWarningIcon {
+  font-size: 1rem;
+  flex-shrink: 0;
+  margin-top: 1px;
+}
+
+.sourceWarningText {
+  color: var(--color-text-secondary);
+  margin: 0;
+  line-height: 1.5;
+}
+
 /* ── Summary list ─────────────────────────────────────────────────────────── */
 
 .list {
@@ -243,6 +339,77 @@
   color: var(--color-text-secondary);
   max-width: 100%;
   overflow-wrap: anywhere;
+}
+
+/* ── Empty / zero-result states ──────────────────────────────────────────── */
+
+.emptyState {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  padding: var(--space-xl) var(--gutter);
+  gap: var(--space-sm);
+}
+
+.emptyIcon {
+  font-size: 2.5rem;
+  line-height: 1;
+  margin-bottom: var(--space-xs);
+}
+
+.emptyTitle {
+  font-size: 1.0625rem;
+  font-weight: 600;
+  color: var(--color-text-primary);
+}
+
+.emptyBody {
+  font-size: 0.875rem;
+  color: var(--color-text-secondary);
+  max-width: 360px;
+  line-height: 1.6;
+}
+
+/* ── Item link buttons ─────────────────────────────────────────────────── */
+
+.itemLinks {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 4px;
+}
+
+.itemLink {
+  font-size: 0.75rem;
+  font-weight: 500;
+  color: var(--color-accent);
+  text-decoration: none;
+  padding: 3px 10px;
+  border: 1px solid var(--color-accent);
+  border-radius: 5px;
+  transition: background-color 0.15s;
+}
+
+.itemLink:hover {
+  background: var(--color-accent-dim);
+}
+
+/* ── Source freshness footer ───────────────────────────────────────────── */
+
+.freshnessFooter {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-md);
+  margin-top: var(--space-lg);
+  padding-top: var(--space-md);
+  border-top: 1px solid var(--color-border);
+}
+
+.freshness {
+  font-size: 0.75rem;
+  color: var(--color-text-muted);
 }
 
 /* ── Responsive ───────────────────────────────────────────────────────────── */

@@ -38,6 +38,14 @@ export interface DashboardSnapshotV1 {
 
 export type EmailActionState = "proposed" | "confirmed";
 
+export type EmailActionType =
+  | "consent_form"
+  | "delivery_change"
+  | "payment"
+  | "calendar_proposal"
+  | "review_change"
+  | "general_action";
+
 export interface EmailIdentifiedAction {
   state: EmailActionState;
   /** Short dashboard-safe phrase describing what needs doing. Required when an action is identified. */
@@ -58,6 +66,64 @@ export interface EmailInboxDisplayItem extends EmailInboxItem {
   receivedLabel: string;
   receivedTime: string;
   receivedDate: string;
+}
+
+// ─── Current email source schema (specs 012 / 007 / 008) ───────────────────
+
+/**
+ * Email source snapshot matching email-dashboard-source/v1 schema.
+ * Used by the email source reader and sync route.
+ */
+export interface EmailDashboardSourceSnapshotV1 {
+  schemaVersion: "email-dashboard-source/v1";
+  source: "email";
+  sourcePath: "dashboard/v1/email/latest.json";
+  dataGeneratedAt: string;
+  inboxQuery: string;
+  items: EmailDashboardRowV1[];
+  summary: EmailDashboardSummaryV1;
+  metadata?: EmailDashboardSourceMetadataV1;
+}
+
+export interface EmailDashboardRowV1 {
+  id: string;
+  subject: string;
+  receivedAt?: string;
+  receivedDateLabel?: string;
+  receivedTimeLabel?: string;
+  labels: string[];
+  readState?: "read" | "unread" | "unknown";
+  identifiedAction?: EmailDashboardIdentifiedActionV1;
+  sortKey?: string;
+  searchText?: string;
+  sourceStatus?: "available";
+}
+
+export interface EmailDashboardIdentifiedActionV1 {
+  emoji?: string;
+  state: EmailActionState;
+  label: string;
+  actionType?: EmailActionType;
+  actionPhrase: string;
+  derivedBy: "monitor_inference" | "rule" | "human_confirmed";
+}
+
+export interface EmailDashboardSummaryV1 {
+  itemCount: number;
+  actionCount: number;
+  proposedCount: number;
+  confirmedCount: number;
+  noActionCount: number;
+  unreadCount?: number;
+  readCount?: number;
+}
+
+export interface EmailDashboardSourceMetadataV1 {
+  snapshotHash?: string;
+  businessContentHash?: string;
+  publisher?: string;
+  skippedWriteBecauseUnchanged?: boolean;
+  sourceRunId?: string;
 }
 
 export type WhatsAppConversationKind = "group" | "direct";
