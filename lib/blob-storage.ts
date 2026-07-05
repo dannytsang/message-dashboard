@@ -16,7 +16,7 @@ import { createHash } from "node:crypto";
 const EMAIL_SOURCE_PATH = "dashboard/v1/email/latest.json";
 const WHATSAPP_SOURCE_PATH = "dashboard/v1/whatsapp/latest.json";
 
-export { EMAIL_SOURCE_PATH as EMAIL_SOURCE_PATH_CONSTANT, EMAIL_SOURCE_PATH };
+export { EMAIL_SOURCE_PATH as EMAIL_SOURCE_PATH_CONSTANT, EMAIL_SOURCE_PATH, WHATSAPP_SOURCE_PATH };
 
 export interface BlobStorageClient {
   readBlobText(path: string): Promise<string | null>;

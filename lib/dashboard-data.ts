@@ -124,6 +124,20 @@ export interface EmailSourceSnapshot {
   items: EmailInboxItem[];
 }
 
+export interface WhatsAppSourceSnapshot {
+  schemaVersion?: string;
+  generatedAt: string;
+  monitored: WhatsAppConversationItem[];
+  drafts: WhatsAppConversationItem[];
+  followUps: WhatsAppFollowUpItem[];
+}
+
+export interface WhatsAppSourceReadResult {
+  mode: DashboardDataMode;
+  snapshot: WhatsAppSourceSnapshot | null;
+  warning?: string;
+}
+
 function isWhatsAppConversationKind(value: unknown): value is WhatsAppConversationKind {
   return value === "group" || value === "direct";
 }
@@ -202,6 +216,19 @@ async function readJsonFromUrl(url: string): Promise<unknown> {
   }
 
   return response.json();
+}
+
+function isWhatsAppSourceSnapshot(value: unknown): value is WhatsAppSourceSnapshot {
+  return (
+    isRecord(value) &&
+    typeof value.generatedAt === "string" &&
+    Array.isArray(value.monitored) &&
+    value.monitored.every(isWhatsAppConversationItem) &&
+    Array.isArray(value.drafts) &&
+    value.drafts.every(isWhatsAppConversationItem) &&
+    Array.isArray(value.followUps) &&
+    value.followUps.every(isWhatsAppFollowUpItem)
+  );
 }
 
 async function readBlobText(path: string): Promise<string | null> {
@@ -328,6 +355,38 @@ export async function readEmailSourceSnapshot(): Promise<EmailSourceReadResult> 
         error instanceof Error
           ? `Email snapshot malformed; falling back to fictional inbox fixtures: ${error.message}`
           : "Email snapshot malformed; falling back to fictional inbox fixtures.",
+    };
+  }
+}
+
+/**
+ * Read WhatsApp source snapshot from its deterministic Blob path (specs 007/008).
+ * Falls back to null + warning when missing/malformed; callers must handle fixture
+ * substitution if they choose to fall back further (e.g. whatsappDashboardFixtureSnapshot).
+ */
+export async function readWhatsAppSourceSnapshot(): Promise<WhatsAppSourceReadResult> {
+  const text = await readBlobText(WHATSAPP_SOURCE_BLOB_PATH);
+  if (text === null || text.trim() === "") {
+    return {
+      mode: "fixture-fallback",
+      snapshot: null,
+      warning: "WhatsApp snapshot unavailable; no fixture fallback for source reader.",
+    };
+  }
+  try {
+    const payload = JSON.parse(text);
+    if (!isWhatsAppSourceSnapshot(payload)) {
+      throw new Error("WhatsApp source snapshot did not match expected schema");
+    }
+    return { mode: "blob", snapshot: payload };
+  } catch (error) {
+    return {
+      mode: "fixture-fallback",
+      snapshot: null,
+      warning:
+        error instanceof Error
+          ? `WhatsApp snapshot malformed: ${error.message}`
+          : "WhatsApp snapshot malformed.",
     };
   }
 }
