@@ -34,8 +34,8 @@ import "server-only";
 import { NextRequest, NextResponse } from "next/server";
 import { VercelBlobStorageClient, EMAIL_SOURCE_PATH, WHATSAPP_SOURCE_PATH } from "@/lib/blob-storage";
 import type {
-  EmailInboxItem,
   EmailActionState,
+  EmailDashboardRowV1,
   WhatsAppConversationItem,
   WhatsAppFollowUpItem,
   WhatsAppFollowUpState,
@@ -74,30 +74,61 @@ function isEmailIdentifiedAction(action: unknown): boolean {
   return (
     (a.state === ("proposed" satisfies EmailActionState) ||
       a.state === ("confirmed" satisfies EmailActionState)) &&
+    typeof a.label === "string" &&
+    a.label.trim() !== "" &&
     typeof a.actionPhrase === "string" &&
     a.actionPhrase.trim() !== "" &&
+    (a.derivedBy === "monitor_inference" ||
+      a.derivedBy === "rule" ||
+      a.derivedBy === "human_confirmed") &&
     (a.actionType === undefined || typeof a.actionType === "string")
   );
 }
 
-function isEmailInboxItem(value: unknown): value is EmailInboxItem {
+function isEmailDashboardRow(value: unknown): value is EmailDashboardRowV1 {
   if (typeof value !== "object" || value === null) return false;
   const row = value as Record<string, unknown>;
   return (
     typeof row.id === "string" &&
-    typeof row.receivedDateTime === "string" &&
     typeof row.subject === "string" &&
+    typeof row.receivedAt === "string" &&
+    row.receivedAt.trim() !== "" &&
+    (row.receivedDateTime === undefined || typeof row.receivedDateTime === "string") &&
     Array.isArray(row.labels) &&
     row.labels.every((l) => typeof l === "string") &&
+    (row.readState === undefined ||
+      row.readState === "read" ||
+      row.readState === "unread" ||
+      row.readState === "unknown") &&
     isEmailIdentifiedAction(row.identifiedAction)
   );
 }
 
 function validateEmailPayload(body: Record<string, unknown>): boolean {
+  if (body.schemaVersion !== "email-dashboard-source/v1") return false;
+  if (body.source !== "email") return false;
+  if (body.sourcePath !== EMAIL_SOURCE_PATH) return false;
+  if (typeof body.dataGeneratedAt !== "string") return false;
+  if (typeof body.inboxQuery !== "string") return false;
+  if (!Array.isArray(body.items) || !body.items.every(isEmailDashboardRow)) return false;
+  const items = body.items as EmailDashboardRowV1[];
+
+  const summary = body.summary;
+  if (typeof summary !== "object" || summary === null) return false;
+  const s = summary as Record<string, unknown>;
+  const proposed = items.filter(
+    (item) => item.identifiedAction?.state === "proposed",
+  ).length;
+  const confirmed = items.filter(
+    (item) => item.identifiedAction?.state === "confirmed",
+  ).length;
+  const actionCount = proposed + confirmed;
   return (
-    typeof body.dataGeneratedAt === "string" &&
-    Array.isArray(body.items) &&
-    body.items.every(isEmailInboxItem)
+    s.itemCount === items.length &&
+    s.actionCount === actionCount &&
+    s.proposedCount === proposed &&
+    s.confirmedCount === confirmed &&
+    s.noActionCount === items.length - actionCount
   );
 }
 
@@ -223,25 +254,22 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
       return NextResponse.json({ error: "Invalid payload" }, { status: 400 });
     }
     // Build email snapshot using the current email-dashboard-source/v1 schema (specs 012/008)
-    const incomingItems = b.items as EmailInboxItem[];
-    const incomingSummary = b.summary as
-      | { itemCount?: number; actionCount?: number }
-      | undefined;
+    const incomingItems = b.items as EmailDashboardRowV1[];
+    const incomingSummary = b.summary as Record<string, unknown>;
     const snapshot = {
       schemaVersion: "email-dashboard-source/v1",
       source: "email" as const,
-      sourcePath: "dashboard/v1/email/latest.json",
+      sourcePath: EMAIL_SOURCE_PATH,
       dataGeneratedAt: b.dataGeneratedAt as string,
-      inboxQuery:
-        typeof b.inboxQuery === "string" ? b.inboxQuery : "in:inbox -in:snoozed",
+      inboxQuery: b.inboxQuery as string,
       items: incomingItems,
-      summary: incomingSummary ?? {
-        itemCount: incomingItems.length,
-        actionCount: incomingItems.filter((i) => i.identifiedAction != null).length,
-      },
+      summary: incomingSummary,
       metadata: {
         ...(incomingMetadata?.snapshotHash != null && {
           snapshotHash: String(incomingMetadata.snapshotHash),
+        }),
+        ...(incomingMetadata?.businessContentHash != null && {
+          businessContentHash: String(incomingMetadata.businessContentHash),
         }),
         ...(incomingMetadata?.publisher != null && {
           publisher: String(incomingMetadata.publisher),

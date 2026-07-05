@@ -89,6 +89,8 @@ export interface EmailDashboardRowV1 {
   id: string;
   subject: string;
   receivedAt?: string;
+  /** Backward-compatible timestamp used by the /emails display model while v1 consumers migrate. */
+  receivedDateTime?: string;
   receivedDateLabel?: string;
   receivedTimeLabel?: string;
   labels: string[];

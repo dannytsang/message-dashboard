@@ -147,6 +147,8 @@ function isEmailDashboardSourceSnapshotV1(
     if (!isRecord(row)) return false;
     if (typeof row.id !== "string") return false;
     if (typeof row.subject !== "string") return false;
+    if (typeof row.receivedAt !== "string" || row.receivedAt.trim() === "") return false;
+    if (row.receivedDateTime !== undefined && typeof row.receivedDateTime !== "string") return false;
     if (!Array.isArray(row.labels)) return false;
     if (!row.labels.every((l: unknown) => typeof l === "string")) return false;
 
@@ -155,9 +157,10 @@ function isEmailDashboardSourceSnapshotV1(
       if (!isRecord(action)) return false;
       if (action.state !== "proposed" && action.state !== "confirmed")
         return false;
+      if (typeof action.label !== "string" || action.label.trim() === "") return false;
       if (typeof action.actionPhrase !== "string") return false;
       if (
-        action.derivedBy !== undefined &&
+        action.derivedBy === undefined ||
         !(["monitor_inference", "rule", "human_confirmed"] as string[]).includes(
           action.derivedBy as string,
         )
@@ -338,6 +341,31 @@ function formatEmailInboxDisplay(item: EmailInboxItem): EmailInboxDisplayItem {
   };
 }
 
+function emailDashboardRowToInboxItem(row: EmailDashboardRowV1): EmailInboxItem {
+  return {
+    id: row.id,
+    receivedDateTime: row.receivedAt ?? row.receivedDateTime ?? "",
+    labels: row.labels,
+    subject: row.subject,
+    identifiedAction: row.identifiedAction
+      ? {
+          state: row.identifiedAction.state,
+          actionPhrase: row.identifiedAction.actionPhrase,
+          actionType: row.identifiedAction.actionType,
+        }
+      : undefined,
+  };
+}
+
+function formatEmailDashboardRowDisplay(row: EmailDashboardRowV1): EmailInboxDisplayItem {
+  const item = emailDashboardRowToInboxItem(row);
+  return {
+    ...formatEmailInboxDisplay(item),
+    ...(row.receivedDateLabel ? { receivedLabel: row.receivedDateLabel } : {}),
+    ...(row.receivedTimeLabel ? { receivedTime: row.receivedTimeLabel } : {}),
+  };
+}
+
 function buildSummary(snapshot: DashboardSnapshotV1): DashboardSnapshotV1["summary"] {
   const items = snapshot.items;
 
@@ -466,6 +494,12 @@ export async function readEmailInboxItems(): Promise<EmailInboxReadResult> {
   if (text !== null && text.trim() !== "") {
     try {
       const payload = JSON.parse(text);
+      if (isEmailDashboardSourceSnapshotV1(payload)) {
+        return {
+          mode: "blob",
+          items: payload.items.map(formatEmailDashboardRowDisplay),
+        };
+      }
       if (!isLegacyEmailSourceSnapshot(payload)) {
         throw new Error("Email source snapshot did not match expected schema");
       }
