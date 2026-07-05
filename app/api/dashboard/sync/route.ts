@@ -16,11 +16,14 @@
  *
  * Request body shape for WhatsApp source:
  *   {
+ *     "schemaVersion": "whatsapp-dashboard-source/v1",
  *     "source": "whatsapp",
- *     "generatedAt": "2026-07-02T12:00:00+00:00",
- *     "monitored": WhatsAppConversationItem[],
- *     "drafts": WhatsAppConversationItem[],
- *     "followUps": WhatsAppFollowUpItem[],
+ *     "sourcePath": "dashboard/v1/whatsapp/latest.json",
+ *     "dataGeneratedAt": "2026-07-02T12:00:00+00:00",
+ *     "summary": { "monitoredCount": number, "draftCount": number, "followUpCount": number },
+ *     "monitored": WhatsAppConversationRowV1[],
+ *     "drafts": WhatsAppConversationRowV1[],
+ *     "followUps": WhatsAppFollowUpRowV1[],
  *   }
  *
  * Response:
@@ -36,10 +39,12 @@ import { VercelBlobStorageClient, EMAIL_SOURCE_PATH, WHATSAPP_SOURCE_PATH } from
 import type {
   EmailActionState,
   EmailDashboardRowV1,
-  WhatsAppConversationItem,
-  WhatsAppFollowUpItem,
-  WhatsAppFollowUpState,
   WhatsAppConversationKind,
+  WhatsAppConversationRowV1,
+  WhatsAppDashboardSourceMetadataV1,
+  WhatsAppDashboardSummaryV1,
+  WhatsAppFollowUpRowV1,
+  WhatsAppFollowUpState,
 } from "@/lib/dashboard-types";
 
 const DASHBOARD_DATA_SECRET = process.env.COMS_DASHBOARD_DATA_SECRET;
@@ -141,35 +146,35 @@ function isWhatsAppTimelineEntry(value: unknown): boolean {
   const e = value as Record<string, unknown>;
   return (
     typeof e.id === "string" &&
-    typeof e.speaker === "string" &&
-    (e.direction === "inbound" || e.direction === "outbound" || e.direction === "system") &&
+    (e.direction === "incoming" || e.direction === "outgoing" || e.direction === "system") &&
     typeof e.summary === "string" &&
-    typeof e.sentAt === "string"
+    (e.speakerLabel === undefined || typeof e.speakerLabel === "string") &&
+    (e.createdAt === undefined || typeof e.createdAt === "string")
   );
 }
 
-function isWhatsAppConversationItem(value: unknown): value is WhatsAppConversationItem {
+function isWhatsAppConversationRow(value: unknown): value is WhatsAppConversationRowV1 {
   if (typeof value !== "object" || value === null) return false;
   const c = value as Record<string, unknown>;
   return (
     typeof c.id === "string" &&
-    (c.kind === ("group" satisfies WhatsAppConversationKind) ||
-      c.kind === ("direct" satisfies WhatsAppConversationKind)) &&
+    (c.conversationKind === ("group" satisfies WhatsAppConversationKind) ||
+      c.conversationKind === ("direct" satisfies WhatsAppConversationKind)) &&
     typeof c.displayName === "string" &&
     typeof c.lastMessageSummary === "string" &&
-    Array.isArray(c.timeline) &&
-    c.timeline.every(isWhatsAppTimelineEntry)
+    (c.timeline === undefined ||
+      (Array.isArray(c.timeline) && c.timeline.length <= 20 && c.timeline.every(isWhatsAppTimelineEntry)))
   );
 }
 
-function isWhatsAppFollowUpItem(value: unknown): value is WhatsAppFollowUpItem {
+function isWhatsAppFollowUpRow(value: unknown): value is WhatsAppFollowUpRowV1 {
   if (typeof value !== "object" || value === null) return false;
   const f = value as Record<string, unknown>;
   return (
     typeof f.id === "string" &&
     typeof f.conversationId === "string" &&
-    (f.kind === ("group" satisfies WhatsAppConversationKind) ||
-      f.kind === ("direct" satisfies WhatsAppConversationKind)) &&
+    (f.conversationKind === ("group" satisfies WhatsAppConversationKind) ||
+      f.conversationKind === ("direct" satisfies WhatsAppConversationKind)) &&
     typeof f.displayName === "string" &&
     (f.state === ("proposed" satisfies WhatsAppFollowUpState) ||
       f.state === ("scheduled" satisfies WhatsAppFollowUpState) ||
@@ -180,25 +185,56 @@ function isWhatsAppFollowUpItem(value: unknown): value is WhatsAppFollowUpItem {
       f.state === ("resolved" satisfies WhatsAppFollowUpState) ||
       f.state === ("suppressed" satisfies WhatsAppFollowUpState)) &&
     typeof f.title === "string" &&
-    typeof f.contextSummary === "string"
+    (f.contextSummary === undefined || typeof f.contextSummary === "string")
   );
 }
 
-function validateWhatsAppPayload(body: Record<string, unknown>): body is {
-  source: "whatsapp";
-  generatedAt: string;
-  monitored: WhatsAppConversationItem[];
-  drafts: WhatsAppConversationItem[];
-  followUps: WhatsAppFollowUpItem[];
-} {
+function deriveWhatsAppSummary(
+  monitored: WhatsAppConversationRowV1[],
+  drafts: WhatsAppConversationRowV1[],
+  followUps: WhatsAppFollowUpRowV1[],
+): WhatsAppDashboardSummaryV1 {
+  const allKinds = [
+    ...monitored.map((item) => item.conversationKind),
+    ...drafts.map((item) => item.conversationKind),
+    ...followUps.map((item) => item.conversationKind),
+  ];
+  return {
+    monitoredCount: monitored.length,
+    draftCount: drafts.length,
+    followUpCount: followUps.length,
+    groupCount: allKinds.filter((kind) => kind === "group").length,
+    directCount: allKinds.filter((kind) => kind === "direct").length,
+    dueSoonCount: followUps.filter((item) => item.state === "due_soon").length,
+    dueNowCount: followUps.filter((item) => item.state === "due_now").length,
+    overdueCount: followUps.filter((item) => item.state === "overdue").length,
+    needsReviewCount: followUps.filter((item) => item.state === "needs_review").length,
+    openCount:
+      monitored.length +
+      drafts.length +
+      followUps.filter((item) => !["resolved", "suppressed"].includes(item.state)).length,
+  };
+}
+
+function validateWhatsAppPayload(body: Record<string, unknown>): boolean {
+  if (body.schemaVersion !== "whatsapp-dashboard-source/v1") return false;
+  if (body.source !== "whatsapp") return false;
+  if (body.sourcePath !== WHATSAPP_SOURCE_PATH) return false;
+  if (typeof body.dataGeneratedAt !== "string") return false;
+  if (!Array.isArray(body.monitored) || !body.monitored.every(isWhatsAppConversationRow)) return false;
+  if (!Array.isArray(body.drafts) || !body.drafts.every(isWhatsAppConversationRow)) return false;
+  if (!Array.isArray(body.followUps) || !body.followUps.every(isWhatsAppFollowUpRow)) return false;
+  if (typeof body.summary !== "object" || body.summary === null) return false;
+  const summary = body.summary as Record<string, unknown>;
+  const expected = deriveWhatsAppSummary(
+    body.monitored as WhatsAppConversationRowV1[],
+    body.drafts as WhatsAppConversationRowV1[],
+    body.followUps as WhatsAppFollowUpRowV1[],
+  );
   return (
-    typeof body.generatedAt === "string" &&
-    Array.isArray(body.monitored) &&
-    body.monitored.every(isWhatsAppConversationItem) &&
-    Array.isArray(body.drafts) &&
-    body.drafts.every(isWhatsAppConversationItem) &&
-    Array.isArray(body.followUps) &&
-    body.followUps.every(isWhatsAppFollowUpItem)
+    summary.monitoredCount === expected.monitoredCount &&
+    summary.draftCount === expected.draftCount &&
+    summary.followUpCount === expected.followUpCount
   );
 }
 
@@ -284,15 +320,38 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     };
     snapshotContent = JSON.stringify(snapshot, null, 2);
   } else if (source === "whatsapp") {
+    const incomingMetadata = b.metadata as
+      | Record<string, unknown>
+      | undefined;
     if (!validateWhatsAppPayload(b)) {
       return NextResponse.json({ error: "Invalid payload" }, { status: 400 });
     }
     const snapshot = {
-      schemaVersion: "whatsapp-source/v1",
-      generatedAt: b.generatedAt as string,
-      monitored: b.monitored as WhatsAppConversationItem[],
-      drafts: b.drafts as WhatsAppConversationItem[],
-      followUps: b.followUps as WhatsAppFollowUpItem[],
+      schemaVersion: "whatsapp-dashboard-source/v1" as const,
+      source: "whatsapp" as const,
+      sourcePath: WHATSAPP_SOURCE_PATH,
+      dataGeneratedAt: b.dataGeneratedAt as string,
+      monitored: b.monitored as WhatsAppConversationRowV1[],
+      drafts: b.drafts as WhatsAppConversationRowV1[],
+      followUps: b.followUps as WhatsAppFollowUpRowV1[],
+      summary: b.summary as WhatsAppDashboardSummaryV1,
+      metadata: {
+        ...(incomingMetadata?.snapshotHash != null && {
+          snapshotHash: String(incomingMetadata.snapshotHash),
+        }),
+        ...(incomingMetadata?.businessContentHash != null && {
+          businessContentHash: String(incomingMetadata.businessContentHash),
+        }),
+        ...(incomingMetadata?.publisher != null && {
+          publisher: String(incomingMetadata.publisher),
+        }),
+        ...(incomingMetadata?.sourceRunId != null && {
+          sourceRunId: String(incomingMetadata.sourceRunId),
+        }),
+        ...(incomingMetadata?.skippedWriteBecauseUnchanged === true && {
+          skippedWriteBecauseUnchanged: true,
+        }),
+      } satisfies WhatsAppDashboardSourceMetadataV1,
     };
     snapshotContent = JSON.stringify(snapshot, null, 2);
   } else {

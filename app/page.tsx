@@ -106,7 +106,9 @@ export default async function HomePage() {
 
   // Extract source-level timestamps and warnings (spec 013: partial availability)
   const whatsappTimestamp = whatsappResult.snapshot
-    ? (whatsappResult.snapshot as { generatedAt?: string }).generatedAt
+    ? (whatsappResult.snapshot as { dataGeneratedAt?: string; generatedAt?: string })
+        .dataGeneratedAt ||
+      (whatsappResult.snapshot as { generatedAt?: string }).generatedAt
     : undefined;
   const emailTimestamp = emailResult.snapshot
     ? (

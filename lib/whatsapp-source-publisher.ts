@@ -1,178 +1,88 @@
+import "server-only";
+import { createHash } from "node:crypto";
+import type {
+  WhatsAppConversationHistoryEntryV1,
+  WhatsAppConversationKind,
+  WhatsAppConversationRowV1,
+  WhatsAppDashboardSourceMetadataV1,
+  WhatsAppDashboardSourceSnapshotV1,
+  WhatsAppDashboardSummaryV1,
+  WhatsAppFollowUpRowV1,
+  WhatsAppFollowUpState,
+  WhatsAppTimelineDirection,
+} from "@/lib/dashboard-types";
+import { WHATSAPP_SOURCE_PATH } from "@/lib/blob-storage";
+
 /**
  * WhatsApp Dashboard Source Publisher helper (specs 011/008/007).
  *
- * Provides sanitisation helpers for monitor-side scripts that produce
- * dashboard WhatsApp snapshots and publish them via POST /api/dashboard/sync.
+ * Builds the canonical whatsapp-dashboard-source/v1 payload expected by
+ * POST /api/dashboard/sync. The helper intentionally produces source rows,
+ * not UI-only runtime rows, so the monitor, sync route, Summary page, and
+ * /whatsapp page all share the same source contract.
  *
- * Privacy rules enforced here (spec 011 FR-003):
- *   - No raw WhatsApp JIDs or phone numbers.
- *   - No local media paths or raw message exports.
- *   - No draft packet IDs or approval payloads.
- *   - No unbounded transcript dumps.
- *   - Rows use safe configured display labels only.
- *
- * Usage in monitor-side scripts:
- *   const snapshot = buildWhatsAppDashboardSnapshot({ monitored, drafts, followUps });
- *   await publishWhatsAppDashboardSnapshot(snapshot);
+ * Privacy rules enforced here:
+ * - no raw WhatsApp JIDs or phone numbers;
+ * - no local media paths or raw exports;
+ * - no draft packet IDs or approval payloads;
+ * - no unbounded transcript dumps;
+ * - rows use safe configured display labels only.
  */
-
-import "server-only";
-import type {
-  WhatsAppConversationItem,
-  WhatsAppConversationKind,
-  WhatsAppDashboardSnapshot,
-  WhatsAppFollowUpItem,
-  WhatsAppFollowUpState,
-  WhatsAppMessageTimelineEntry,
-} from "@/lib/dashboard-types";
-
-// ---------------------------------------------------------------------------
-// Internal types used by monitor-side scripts (not exported to public types)
-// ---------------------------------------------------------------------------
 
 interface MonitorConversation {
   id: string;
-  kind: WhatsAppConversationKind;
+  kind?: WhatsAppConversationKind;
+  conversationKind?: WhatsAppConversationKind;
   displayName: string;
   lastMessageSummary: string;
   lastMessageAt?: string;
+  lastMessageRelativeLabel?: string;
   listNotes?: string[];
   pendingDraftSnippet?: string;
+  draftSummary?: string;
+  state?: WhatsAppConversationRowV1["state"];
   historySummary?: string;
-  timeline: MonitorTimelineEntry[];
+  timeline?: MonitorTimelineEntry[];
 }
 
 interface MonitorTimelineEntry {
   id: string;
-  speaker: string;
-  direction: "inbound" | "outbound" | "system";
+  speaker?: string;
+  speakerLabel?: string;
+  direction: "inbound" | "outbound" | "incoming" | "outgoing" | "system";
   summary: string;
-  sentAt: string;
+  sentAt?: string;
+  createdAt?: string;
+  relativeLabel?: string;
 }
 
 interface MonitorFollowUp {
   id: string;
   conversationId: string;
-  kind: WhatsAppConversationKind;
+  kind?: WhatsAppConversationKind;
+  conversationKind?: WhatsAppConversationKind;
   displayName: string;
   state: WhatsAppFollowUpState;
   title: string;
   dueAt?: string;
   relativeDueLabel?: string;
-  contextSummary: string;
+  dueRelativeLabel?: string;
+  lastMessageSummary?: string;
+  lastMessageAt?: string;
+  topicSummary?: string;
+  contextSummary?: string;
+  confidenceLabel?: "low" | "medium" | "high";
 }
 
 interface BuildOptions {
   monitored: MonitorConversation[];
   drafts: MonitorConversation[];
   followUps: MonitorFollowUp[];
+  dataGeneratedAt?: string;
+  metadata?: WhatsAppDashboardSourceMetadataV1;
 }
 
-// ---------------------------------------------------------------------------
-// Build a complete WhatsApp source snapshot (spec 011 FR-001)
-// ---------------------------------------------------------------------------
-
-/**
- * Build a WhatsAppDashboardSnapshot from monitor-side conversation/follow-up state.
- * This is the monitor-side entry point — it applies all sanitisation rules before
- * the snapshot is sent to the dashboard sync endpoint.
- */
-export function buildWhatsAppDashboardSnapshot(options: BuildOptions): WhatsAppDashboardSnapshot {
-  return {
-    generatedAt: new Date().toISOString(),
-    monitored: options.monitored.map(sanitiseConversation),
-    drafts: options.drafts.map(sanitiseConversation),
-    followUps: options.followUps.map(sanitiseFollowUp),
-  };
-}
-
-// ---------------------------------------------------------------------------
-// Privacy sanitisation
-// ---------------------------------------------------------------------------
-
-/**
- * Convert a monitor-side conversation to a dashboard-safe WhatsAppConversationItem.
- * Enforces spec 011 FR-003 privacy exclusions:
- *   - No raw JIDs / phone numbers (must use displayName)
- *   - No local media paths
- *   - No raw message exports
- *   - No draft packet IDs / approval payloads
- *   - Bounded sanitised timeline
- */
-function sanitiseConversation(conv: MonitorConversation): WhatsAppConversationItem {
-  return {
-    id: conv.id,
-    kind: conv.kind,
-    displayName: conv.displayName,
-    lastMessageSummary: conv.lastMessageSummary,
-    lastMessageAt: conv.lastMessageAt,
-    listNotes: conv.listNotes,
-    pendingDraftSnippet: conv.pendingDraftSnippet,
-    historySummary: conv.historySummary,
-    timeline: conv.timeline.slice(0, MAX_TIMELINE_ENTRIES).map(sanitiseTimelineEntry),
-  };
-}
-
-function sanitiseTimelineEntry(entry: MonitorTimelineEntry): WhatsAppMessageTimelineEntry {
-  return {
-    id: entry.id,
-    speaker: entry.speaker,
-    direction: entry.direction,
-    summary: entry.summary,
-    sentAt: entry.sentAt,
-  };
-}
-
-function sanitiseFollowUp(item: MonitorFollowUp): WhatsAppFollowUpItem {
-  return {
-    id: item.id,
-    conversationId: item.conversationId,
-    kind: item.kind,
-    displayName: item.displayName,
-    state: item.state,
-    title: item.title,
-    dueAt: item.dueAt,
-    relativeDueLabel: item.relativeDueLabel,
-    contextSummary: item.contextSummary,
-  };
-}
-
-// ---------------------------------------------------------------------------
-// Snapshot validation before publish (spec 011 FR-007)
-// ---------------------------------------------------------------------------
-
-/**
- * Validate a WhatsAppDashboardSnapshot before sending it to the sync endpoint.
- * Returns true if the snapshot is safe to publish; throws with a descriptive
- * message if validation fails (spec 011 FR-007: "if validation fails, no write should occur").
- */
-export function validateWhatsAppSnapshot(snapshot: WhatsAppDashboardSnapshot): void {
-  if (!snapshot || typeof snapshot !== "object") {
-    throw new Error("Snapshot must be a non-null object");
-  }
-  if (typeof snapshot.generatedAt !== "string" || snapshot.generatedAt.trim() === "") {
-    throw new Error("Snapshot must have a non-empty generatedAt string");
-  }
-  if (!Array.isArray(snapshot.monitored)) {
-    throw new Error("Snapshot must have a monitored array");
-  }
-  if (!Array.isArray(snapshot.drafts)) {
-    throw new Error("Snapshot must have a drafts array");
-  }
-  if (!Array.isArray(snapshot.followUps)) {
-    throw new Error("Snapshot must have a followUps array");
-  }
-  for (const conv of snapshot.monitored) {
-    validateConversation("monitored", conv);
-  }
-  for (const conv of snapshot.drafts) {
-    validateConversation("drafts", conv);
-  }
-  for (const item of snapshot.followUps) {
-    validateFollowUp(item);
-  }
-}
-
+const MAX_TIMELINE_ENTRIES = 20;
 const VALID_KINDS = new Set(["group", "direct"]);
 const VALID_STATES = new Set([
   "proposed",
@@ -185,62 +95,183 @@ const VALID_STATES = new Set([
   "suppressed",
 ]);
 
-function validateConversation(listName: string, conv: unknown): void {
-  if (!conv || typeof conv !== "object") {
-    throw new Error(`${listName}: each entry must be a non-null object`);
+function sha256Hex(value: string): string {
+  return createHash("sha256").update(value, "utf8").digest("hex");
+}
+
+function stableJson(value: unknown): string {
+  if (Array.isArray(value)) return `[${value.map(stableJson).join(",")}]`;
+  if (value && typeof value === "object") {
+    const record = value as Record<string, unknown>;
+    return `{${Object.keys(record)
+      .sort()
+      .map((key) => `${JSON.stringify(key)}:${stableJson(record[key])}`)
+      .join(",")}}`;
   }
-  const c = conv as Record<string, unknown>;
-  if (typeof c.id !== "string" || c.id.trim() === "") {
-    throw new Error(`${listName}: each conversation must have a non-empty id`);
+  return JSON.stringify(value);
+}
+
+function canonicalDirection(direction: MonitorTimelineEntry["direction"]): WhatsAppTimelineDirection {
+  if (direction === "inbound") return "incoming";
+  if (direction === "outbound") return "outgoing";
+  return direction;
+}
+
+function sanitiseTimelineEntry(entry: MonitorTimelineEntry): WhatsAppConversationHistoryEntryV1 {
+  return {
+    id: entry.id,
+    speakerLabel: entry.speakerLabel ?? entry.speaker,
+    direction: canonicalDirection(entry.direction),
+    summary: entry.summary,
+    createdAt: entry.createdAt ?? entry.sentAt,
+    relativeLabel: entry.relativeLabel,
+  };
+}
+
+function conversationKind(item: { kind?: WhatsAppConversationKind; conversationKind?: WhatsAppConversationKind }): WhatsAppConversationKind {
+  const kind = item.conversationKind ?? item.kind;
+  if (!kind) throw new Error("Conversation kind is required");
+  return kind;
+}
+
+function sanitiseConversation(conv: MonitorConversation): WhatsAppConversationRowV1 {
+  return {
+    id: conv.id,
+    conversationKind: conversationKind(conv),
+    displayName: conv.displayName,
+    lastMessageSummary: conv.lastMessageSummary,
+    lastMessageAt: conv.lastMessageAt,
+    lastMessageRelativeLabel: conv.lastMessageRelativeLabel,
+    draftSummary: conv.draftSummary ?? conv.pendingDraftSnippet,
+    state: conv.state,
+    listNotes: conv.listNotes,
+    historySummary: conv.historySummary,
+    timeline: (conv.timeline ?? []).slice(0, MAX_TIMELINE_ENTRIES).map(sanitiseTimelineEntry),
+  };
+}
+
+function sanitiseFollowUp(item: MonitorFollowUp): WhatsAppFollowUpRowV1 {
+  return {
+    id: item.id,
+    conversationId: item.conversationId,
+    conversationKind: conversationKind(item),
+    displayName: item.displayName,
+    state: item.state,
+    title: item.title,
+    dueAt: item.dueAt,
+    dueRelativeLabel: item.dueRelativeLabel ?? item.relativeDueLabel,
+    lastMessageSummary: item.lastMessageSummary,
+    lastMessageAt: item.lastMessageAt,
+    topicSummary: item.topicSummary,
+    contextSummary: item.contextSummary,
+    confidenceLabel: item.confidenceLabel,
+  };
+}
+
+function deriveSummary(
+  monitored: WhatsAppConversationRowV1[],
+  drafts: WhatsAppConversationRowV1[],
+  followUps: WhatsAppFollowUpRowV1[],
+): WhatsAppDashboardSummaryV1 {
+  const allKinds = [
+    ...monitored.map((item) => item.conversationKind),
+    ...drafts.map((item) => item.conversationKind),
+    ...followUps.map((item) => item.conversationKind),
+  ];
+  return {
+    monitoredCount: monitored.length,
+    draftCount: drafts.length,
+    followUpCount: followUps.length,
+    groupCount: allKinds.filter((kind) => kind === "group").length,
+    directCount: allKinds.filter((kind) => kind === "direct").length,
+    dueSoonCount: followUps.filter((item) => item.state === "due_soon").length,
+    dueNowCount: followUps.filter((item) => item.state === "due_now").length,
+    overdueCount: followUps.filter((item) => item.state === "overdue").length,
+    needsReviewCount: followUps.filter((item) => item.state === "needs_review").length,
+    openCount:
+      monitored.length +
+      drafts.length +
+      followUps.filter((item) => !["resolved", "suppressed"].includes(item.state)).length,
+  };
+}
+
+function businessHash(snapshot: Pick<WhatsAppDashboardSourceSnapshotV1, "schemaVersion" | "source" | "sourcePath" | "monitored" | "drafts" | "followUps" | "summary">): string {
+  return sha256Hex(stableJson(snapshot));
+}
+
+export function buildWhatsAppDashboardSnapshot(options: BuildOptions): WhatsAppDashboardSourceSnapshotV1 {
+  const monitored = options.monitored.map(sanitiseConversation);
+  const drafts = options.drafts.map(sanitiseConversation);
+  const followUps = options.followUps.map(sanitiseFollowUp);
+  const summary = deriveSummary(monitored, drafts, followUps);
+  const base = {
+    schemaVersion: "whatsapp-dashboard-source/v1" as const,
+    source: "whatsapp" as const,
+    sourcePath: "dashboard/v1/whatsapp/latest.json" as const,
+    monitored,
+    drafts,
+    followUps,
+    summary,
+  };
+  const businessContentHash = businessHash(base);
+  const snapshot: WhatsAppDashboardSourceSnapshotV1 = {
+    ...base,
+    dataGeneratedAt: options.dataGeneratedAt ?? new Date().toISOString(),
+    metadata: {
+      ...options.metadata,
+      businessContentHash: options.metadata?.businessContentHash ?? businessContentHash,
+      publisher: options.metadata?.publisher ?? "whatsapp-monitor",
+    },
+  };
+  validateWhatsAppSnapshot(snapshot);
+  return snapshot;
+}
+
+export function validateWhatsAppSnapshot(snapshot: WhatsAppDashboardSourceSnapshotV1): void {
+  if (!snapshot || typeof snapshot !== "object") {
+    throw new Error("Snapshot must be a non-null object");
   }
-  if (!VALID_KINDS.has(c.kind as string)) {
-    throw new Error(`${listName}: conversation kind must be "group" or "direct"`);
+  if (snapshot.schemaVersion !== "whatsapp-dashboard-source/v1") {
+    throw new Error("Snapshot must use schemaVersion whatsapp-dashboard-source/v1");
   }
-  if (typeof c.displayName !== "string" || c.displayName.trim() === "") {
-    throw new Error(`${listName}: each conversation must have a non-empty displayName`);
+  if (snapshot.source !== "whatsapp" || snapshot.sourcePath !== WHATSAPP_SOURCE_PATH) {
+    throw new Error("Snapshot must use the deterministic WhatsApp source path");
   }
-  if (typeof c.lastMessageSummary !== "string") {
-    throw new Error(`${listName}: each conversation must have a lastMessageSummary string`);
+  if (typeof snapshot.dataGeneratedAt !== "string" || snapshot.dataGeneratedAt.trim() === "") {
+    throw new Error("Snapshot must have a non-empty dataGeneratedAt string");
   }
-  if (!Array.isArray(c.timeline)) {
-    throw new Error(`${listName}: each conversation must have a timeline array`);
+  if (!Array.isArray(snapshot.monitored) || !Array.isArray(snapshot.drafts) || !Array.isArray(snapshot.followUps)) {
+    throw new Error("Snapshot must include monitored, drafts, and followUps arrays");
   }
-  if (c.timeline.length > MAX_TIMELINE_ENTRIES) {
-    throw new Error(`${listName}: timeline must not exceed ${MAX_TIMELINE_ENTRIES} entries`);
+  snapshot.monitored.forEach((item, index) => validateConversation(`monitored[${index}]`, item));
+  snapshot.drafts.forEach((item, index) => validateConversation(`drafts[${index}]`, item));
+  snapshot.followUps.forEach((item, index) => validateFollowUp(`followUps[${index}]`, item));
+  const expected = deriveSummary(snapshot.monitored, snapshot.drafts, snapshot.followUps);
+  if (
+    snapshot.summary.monitoredCount !== expected.monitoredCount ||
+    snapshot.summary.draftCount !== expected.draftCount ||
+    snapshot.summary.followUpCount !== expected.followUpCount
+  ) {
+    throw new Error("Snapshot summary counts must match published arrays");
   }
 }
 
-function validateFollowUp(item: unknown): void {
-  if (!item || typeof item !== "object") {
-    throw new Error("followUps: each entry must be a non-null object");
-  }
-  const f = item as Record<string, unknown>;
-  if (typeof f.id !== "string" || f.id.trim() === "") {
-    throw new Error("followUps: each item must have a non-empty id");
-  }
-  if (typeof f.conversationId !== "string" || f.conversationId.trim() === "") {
-    throw new Error("followUps: each item must have a non-empty conversationId");
-  }
-  if (!VALID_KINDS.has(f.kind as string)) {
-    throw new Error("followUps: item kind must be \"group\" or \"direct\"");
-  }
-  if (typeof f.displayName !== "string" || f.displayName.trim() === "") {
-    throw new Error("followUps: each item must have a non-empty displayName");
-  }
-  if (!VALID_STATES.has(f.state as string)) {
-    throw new Error("followUps: item state must be a valid WhatsAppFollowUpState");
-  }
-  if (typeof f.title !== "string" || f.title.trim() === "") {
-    throw new Error("followUps: each item must have a non-empty title");
-  }
-  if (typeof f.contextSummary !== "string") {
-    throw new Error("followUps: each item must have a contextSummary string");
-  }
+function validateConversation(label: string, conv: WhatsAppConversationRowV1): void {
+  if (typeof conv.id !== "string" || conv.id.trim() === "") throw new Error(`${label}: id is required`);
+  if (!VALID_KINDS.has(conv.conversationKind)) throw new Error(`${label}: conversationKind is invalid`);
+  if (typeof conv.displayName !== "string" || conv.displayName.trim() === "") throw new Error(`${label}: displayName is required`);
+  if (typeof conv.lastMessageSummary !== "string") throw new Error(`${label}: lastMessageSummary is required`);
+  if ((conv.timeline ?? []).length > MAX_TIMELINE_ENTRIES) throw new Error(`${label}: timeline exceeds ${MAX_TIMELINE_ENTRIES}`);
 }
 
-// ---------------------------------------------------------------------------
-// Sync result reporting (spec 008 FR-009)
-// ---------------------------------------------------------------------------
+function validateFollowUp(label: string, item: WhatsAppFollowUpRowV1): void {
+  if (typeof item.id !== "string" || item.id.trim() === "") throw new Error(`${label}: id is required`);
+  if (typeof item.conversationId !== "string" || item.conversationId.trim() === "") throw new Error(`${label}: conversationId is required`);
+  if (!VALID_KINDS.has(item.conversationKind)) throw new Error(`${label}: conversationKind is invalid`);
+  if (typeof item.displayName !== "string" || item.displayName.trim() === "") throw new Error(`${label}: displayName is required`);
+  if (!VALID_STATES.has(item.state)) throw new Error(`${label}: state is invalid`);
+  if (typeof item.title !== "string" || item.title.trim() === "") throw new Error(`${label}: title is required`);
+}
 
 export interface WhatsAppSyncReport {
   source: "whatsapp";
@@ -256,33 +287,21 @@ export interface WhatsAppSyncReport {
   error?: string;
 }
 
-/**
- * Parse the dashboard sync response into a safe report suitable for cron logs.
- * Safe fields only: source key, path, generated timestamp, item counts, write status.
- * Never includes: raw JIDs, phone numbers, tokens, local paths, sender details.
- */
 export function parseWhatsAppSyncResponse(
   response: { ok: boolean; path?: string; written?: boolean; skipped?: boolean; error?: string },
-  snapshot: WhatsAppDashboardSnapshot,
+  snapshot: WhatsAppDashboardSourceSnapshotV1,
 ): WhatsAppSyncReport {
   return {
     source: "whatsapp",
-    path: response.path ?? "dashboard/v1/whatsapp/latest.json",
-    generatedAt: snapshot.generatedAt,
+    path: response.path ?? WHATSAPP_SOURCE_PATH,
+    generatedAt: snapshot.dataGeneratedAt,
     itemCounts: {
-      monitored: snapshot.monitored.length,
-      drafts: snapshot.drafts.length,
-      followUps: snapshot.followUps.length,
+      monitored: snapshot.summary.monitoredCount,
+      drafts: snapshot.summary.draftCount,
+      followUps: snapshot.summary.followUpCount,
     },
     written: response.written ?? false,
     skipped: response.skipped,
     error: response.error,
   };
 }
-
-// ---------------------------------------------------------------------------
-// Constants
-// ---------------------------------------------------------------------------
-
-/** Maximum timeline entries per conversation to prevent unbounded transcript dumps (spec 011 FR-005) */
-const MAX_TIMELINE_ENTRIES = 20;

@@ -18,11 +18,16 @@ import type {
   EmailDashboardSummaryV1,
   EmailInboxDisplayItem,
   EmailInboxItem,
+  WhatsAppConversationHistoryEntryV1,
   WhatsAppConversationItem,
   WhatsAppConversationKind,
+  WhatsAppConversationRowV1,
   WhatsAppDashboardReadResult,
   WhatsAppDashboardSnapshot,
+  WhatsAppDashboardSourceSnapshotV1,
+  WhatsAppDashboardSummaryV1,
   WhatsAppFollowUpItem,
+  WhatsAppFollowUpRowV1,
   WhatsAppFollowUpState,
 } from "@/lib/dashboard-types";
 
@@ -189,13 +194,7 @@ function isLegacyEmailSourceSnapshot(value: unknown): boolean {
  */
 export type EmailSourceSnapshot = EmailDashboardSourceSnapshotV1;
 
-export interface WhatsAppSourceSnapshot {
-  schemaVersion?: string;
-  generatedAt: string;
-  monitored: WhatsAppConversationItem[];
-  drafts: WhatsAppConversationItem[];
-  followUps: WhatsAppFollowUpItem[];
-}
+export type WhatsAppSourceSnapshot = WhatsAppDashboardSourceSnapshotV1;
 
 export interface WhatsAppSourceReadResult {
   mode: DashboardDataMode;
@@ -268,6 +267,168 @@ function isWhatsAppDashboardSnapshot(value: unknown): value is WhatsAppDashboard
   );
 }
 
+function isWhatsAppTimelineDirection(value: unknown): value is "incoming" | "outgoing" | "system" {
+  return value === "incoming" || value === "outgoing" || value === "system";
+}
+
+function isWhatsAppConversationRowV1(value: unknown): value is WhatsAppConversationRowV1 {
+  return (
+    isRecord(value) &&
+    typeof value.id === "string" &&
+    isWhatsAppConversationKind(value.conversationKind) &&
+    typeof value.displayName === "string" &&
+    typeof value.lastMessageSummary === "string" &&
+    (value.timeline === undefined ||
+      (Array.isArray(value.timeline) &&
+        value.timeline.length <= 20 &&
+        value.timeline.every(
+          (entry) =>
+            isRecord(entry) &&
+            typeof entry.id === "string" &&
+            isWhatsAppTimelineDirection(entry.direction) &&
+            typeof entry.summary === "string" &&
+            (entry.speakerLabel === undefined || typeof entry.speakerLabel === "string") &&
+            (entry.createdAt === undefined || typeof entry.createdAt === "string"),
+        )))
+  );
+}
+
+function isWhatsAppFollowUpRowV1(value: unknown): value is WhatsAppFollowUpRowV1 {
+  return (
+    isRecord(value) &&
+    typeof value.id === "string" &&
+    typeof value.conversationId === "string" &&
+    isWhatsAppConversationKind(value.conversationKind) &&
+    typeof value.displayName === "string" &&
+    isWhatsAppFollowUpState(value.state) &&
+    typeof value.title === "string" &&
+    (value.contextSummary === undefined || typeof value.contextSummary === "string")
+  );
+}
+
+function deriveWhatsAppSummary(
+  monitored: Array<WhatsAppConversationRowV1 | WhatsAppConversationItem>,
+  drafts: Array<WhatsAppConversationRowV1 | WhatsAppConversationItem>,
+  followUps: Array<WhatsAppFollowUpRowV1 | WhatsAppFollowUpItem>,
+): WhatsAppDashboardSummaryV1 {
+  const conversationKinds = [...monitored, ...drafts].map(
+    (item) => "conversationKind" in item && item.conversationKind ? item.conversationKind : "kind" in item ? item.kind : undefined,
+  );
+  const followUpKinds = followUps.map(
+    (item) => "conversationKind" in item && item.conversationKind ? item.conversationKind : "kind" in item ? item.kind : undefined,
+  );
+  const allKinds = [...conversationKinds, ...followUpKinds];
+  return {
+    monitoredCount: monitored.length,
+    draftCount: drafts.length,
+    followUpCount: followUps.length,
+    groupCount: allKinds.filter((kind) => kind === "group").length,
+    directCount: allKinds.filter((kind) => kind === "direct").length,
+    dueSoonCount: followUps.filter((item) => item.state === "due_soon").length,
+    dueNowCount: followUps.filter((item) => item.state === "due_now").length,
+    overdueCount: followUps.filter((item) => item.state === "overdue").length,
+    needsReviewCount: followUps.filter((item) => item.state === "needs_review").length,
+    openCount:
+      monitored.length +
+      drafts.length +
+      followUps.filter((item) => !["resolved", "suppressed"].includes(item.state)).length,
+  };
+}
+
+function summaryMatchesWhatsAppSnapshot(value: WhatsAppDashboardSourceSnapshotV1): boolean {
+  const expected = deriveWhatsAppSummary(value.monitored, value.drafts, value.followUps);
+  return (
+    value.summary.monitoredCount === expected.monitoredCount &&
+    value.summary.draftCount === expected.draftCount &&
+    value.summary.followUpCount === expected.followUpCount
+  );
+}
+
+function isWhatsAppSourceSnapshot(value: unknown): value is WhatsAppDashboardSourceSnapshotV1 {
+  return (
+    isRecord(value) &&
+    value.schemaVersion === "whatsapp-dashboard-source/v1" &&
+    value.source === "whatsapp" &&
+    value.sourcePath === WHATSAPP_SOURCE_BLOB_PATH &&
+    typeof value.dataGeneratedAt === "string" &&
+    Array.isArray(value.monitored) &&
+    value.monitored.every(isWhatsAppConversationRowV1) &&
+    Array.isArray(value.drafts) &&
+    value.drafts.every(isWhatsAppConversationRowV1) &&
+    Array.isArray(value.followUps) &&
+    value.followUps.every(isWhatsAppFollowUpRowV1) &&
+    isRecord(value.summary) &&
+    typeof value.summary.monitoredCount === "number" &&
+    typeof value.summary.draftCount === "number" &&
+    typeof value.summary.followUpCount === "number" &&
+    summaryMatchesWhatsAppSnapshot(value as unknown as WhatsAppDashboardSourceSnapshotV1)
+  );
+}
+
+function timelineEntryToUi(entry: WhatsAppConversationHistoryEntryV1) {
+  return {
+    id: entry.id,
+    speaker: entry.speakerLabel ?? "Conversation",
+    direction:
+      entry.direction === "incoming"
+        ? ("inbound" as const)
+        : entry.direction === "outgoing"
+          ? ("outbound" as const)
+          : ("system" as const),
+    summary: entry.summary,
+    sentAt: entry.createdAt ?? "",
+  };
+}
+
+function whatsAppConversationRowToUi(row: WhatsAppConversationRowV1): WhatsAppConversationItem {
+  return {
+    id: row.id,
+    kind: row.conversationKind,
+    conversationKind: row.conversationKind,
+    displayName: row.displayName,
+    lastMessageSummary: row.lastMessageSummary,
+    lastMessageAt: row.lastMessageAt,
+    lastMessageRelativeLabel: row.lastMessageRelativeLabel,
+    listNotes: row.listNotes,
+    pendingDraftSnippet: row.draftSummary,
+    draftSummary: row.draftSummary,
+    state: row.state,
+    historySummary: row.historySummary,
+    timeline: (row.timeline ?? []).map(timelineEntryToUi),
+  };
+}
+
+function whatsAppFollowUpRowToUi(row: WhatsAppFollowUpRowV1): WhatsAppFollowUpItem {
+  return {
+    id: row.id,
+    conversationId: row.conversationId,
+    kind: row.conversationKind,
+    conversationKind: row.conversationKind,
+    displayName: row.displayName,
+    state: row.state,
+    title: row.title,
+    dueAt: row.dueAt,
+    relativeDueLabel: row.dueRelativeLabel,
+    dueRelativeLabel: row.dueRelativeLabel,
+    contextSummary: row.contextSummary ?? row.topicSummary ?? row.lastMessageSummary ?? "",
+  };
+}
+
+function whatsAppSourceSnapshotToUi(snapshot: WhatsAppDashboardSourceSnapshotV1): WhatsAppDashboardSnapshot {
+  return {
+    schemaVersion: snapshot.schemaVersion,
+    source: snapshot.source,
+    sourcePath: snapshot.sourcePath,
+    generatedAt: snapshot.dataGeneratedAt,
+    dataGeneratedAt: snapshot.dataGeneratedAt,
+    monitored: snapshot.monitored.map(whatsAppConversationRowToUi),
+    drafts: snapshot.drafts.map(whatsAppConversationRowToUi),
+    followUps: snapshot.followUps.map(whatsAppFollowUpRowToUi),
+    summary: snapshot.summary,
+    metadata: snapshot.metadata,
+  };
+}
+
 async function readJsonFromUrl(url: string): Promise<unknown> {
   const response = await fetch(url, {
     cache: "no-store",
@@ -281,19 +442,6 @@ async function readJsonFromUrl(url: string): Promise<unknown> {
   }
 
   return response.json();
-}
-
-function isWhatsAppSourceSnapshot(value: unknown): value is WhatsAppSourceSnapshot {
-  return (
-    isRecord(value) &&
-    typeof value.generatedAt === "string" &&
-    Array.isArray(value.monitored) &&
-    value.monitored.every(isWhatsAppConversationItem) &&
-    Array.isArray(value.drafts) &&
-    value.drafts.every(isWhatsAppConversationItem) &&
-    Array.isArray(value.followUps) &&
-    value.followUps.every(isWhatsAppFollowUpItem)
-  );
 }
 
 async function readBlobText(path: string): Promise<string | null> {
@@ -546,6 +694,15 @@ export async function readEmailInboxItems(): Promise<EmailInboxReadResult> {
 }
 
 export async function readWhatsAppDashboardData(): Promise<WhatsAppDashboardReadResult> {
+  const sourceResult = await readWhatsAppSourceSnapshot();
+  if (sourceResult.snapshot) {
+    return {
+      mode: "blob",
+      snapshot: whatsAppSourceSnapshotToUi(sourceResult.snapshot),
+      warning: sourceResult.warning,
+    };
+  }
+
   const dashboardUrl = process.env[WHATSAPP_DASHBOARD_URL_ENV];
 
   if (dashboardUrl) {
@@ -574,6 +731,7 @@ export async function readWhatsAppDashboardData(): Promise<WhatsAppDashboardRead
   return {
     mode: "fixture-fallback",
     snapshot: whatsappDashboardFixtureSnapshot,
+    warning: sourceResult.warning,
   };
 }
 

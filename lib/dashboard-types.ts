@@ -142,6 +142,8 @@ export type WhatsAppFollowUpState =
   | "resolved"
   | "suppressed";
 
+export type WhatsAppTimelineDirection = "incoming" | "outgoing" | "system";
+
 export interface WhatsAppMessageTimelineEntry {
   id: string;
   speaker: string;
@@ -150,28 +152,113 @@ export interface WhatsAppMessageTimelineEntry {
   sentAt: string;
 }
 
+export interface WhatsAppConversationHistoryEntryV1 {
+  id: string;
+  speakerLabel?: string;
+  direction: WhatsAppTimelineDirection;
+  summary: string;
+  createdAt?: string;
+  relativeLabel?: string;
+}
+
 export interface WhatsAppConversationItem {
   id: string;
+  /** Runtime/UI alias for the canonical source contract's conversationKind. */
   kind: WhatsAppConversationKind;
+  conversationKind?: WhatsAppConversationKind;
   displayName: string;
   lastMessageSummary: string;
   lastMessageAt?: string;
+  lastMessageRelativeLabel?: string;
   listNotes?: string[];
   pendingDraftSnippet?: string;
+  draftSummary?: string;
+  state?:
+    | "monitored"
+    | "draft_awaiting_approval"
+    | "review_needed"
+    | "reminded"
+    | "uncertain_needs_review";
   historySummary?: string;
   timeline: WhatsAppMessageTimelineEntry[];
+}
+
+export interface WhatsAppConversationRowV1 {
+  id: string;
+  conversationKind: WhatsAppConversationKind;
+  displayName: string;
+  lastMessageSummary: string;
+  lastMessageAt?: string;
+  lastMessageRelativeLabel?: string;
+  draftSummary?: string;
+  state?: WhatsAppConversationItem["state"];
+  listNotes?: string[];
+  historySummary?: string;
+  timeline?: WhatsAppConversationHistoryEntryV1[];
 }
 
 export interface WhatsAppFollowUpItem {
   id: string;
   conversationId: string;
+  /** Runtime/UI alias for the canonical source contract's conversationKind. */
   kind: WhatsAppConversationKind;
+  conversationKind?: WhatsAppConversationKind;
   displayName: string;
   state: WhatsAppFollowUpState;
   title: string;
   dueAt?: string;
   relativeDueLabel?: string;
+  dueRelativeLabel?: string;
   contextSummary: string;
+}
+
+export interface WhatsAppFollowUpRowV1 {
+  id: string;
+  conversationId: string;
+  conversationKind: WhatsAppConversationKind;
+  displayName: string;
+  state: WhatsAppFollowUpState;
+  title: string;
+  dueAt?: string;
+  dueRelativeLabel?: string;
+  lastMessageSummary?: string;
+  lastMessageAt?: string;
+  topicSummary?: string;
+  contextSummary?: string;
+  confidenceLabel?: "low" | "medium" | "high";
+}
+
+export interface WhatsAppDashboardSummaryV1 {
+  monitoredCount: number;
+  draftCount: number;
+  followUpCount: number;
+  groupCount?: number;
+  directCount?: number;
+  dueSoonCount?: number;
+  dueNowCount?: number;
+  overdueCount?: number;
+  needsReviewCount?: number;
+  openCount?: number;
+}
+
+export interface WhatsAppDashboardSourceMetadataV1 {
+  snapshotHash?: string;
+  businessContentHash?: string;
+  publisher?: string;
+  skippedWriteBecauseUnchanged?: boolean;
+  sourceRunId?: string;
+}
+
+export interface WhatsAppDashboardSourceSnapshotV1 {
+  schemaVersion: "whatsapp-dashboard-source/v1";
+  source: "whatsapp";
+  sourcePath: "dashboard/v1/whatsapp/latest.json";
+  dataGeneratedAt: string;
+  monitored: WhatsAppConversationRowV1[];
+  drafts: WhatsAppConversationRowV1[];
+  followUps: WhatsAppFollowUpRowV1[];
+  summary: WhatsAppDashboardSummaryV1;
+  metadata?: WhatsAppDashboardSourceMetadataV1;
 }
 
 export interface WhatsAppDashboardSnapshot {
@@ -179,6 +266,12 @@ export interface WhatsAppDashboardSnapshot {
   monitored: WhatsAppConversationItem[];
   drafts: WhatsAppConversationItem[];
   followUps: WhatsAppFollowUpItem[];
+  schemaVersion?: "whatsapp-dashboard-source/v1" | "whatsapp-source/v1";
+  source?: "whatsapp";
+  sourcePath?: "dashboard/v1/whatsapp/latest.json";
+  dataGeneratedAt?: string;
+  summary?: WhatsAppDashboardSummaryV1;
+  metadata?: WhatsAppDashboardSourceMetadataV1;
 }
 
 export interface WhatsAppDashboardReadResult {
