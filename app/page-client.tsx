@@ -1,8 +1,9 @@
 "use client";
 
-import { useState, useMemo } from "react";
-import Link from "next/link";
-import type { CommunicationItem, CommunicationSource } from "@/lib/dashboard-types";
+import { useEffect, useMemo, useState } from "react";
+import CompactFeed from "@/components/CompactFeed";
+import DetailInspector from "@/components/DetailInspector";
+import type { CommunicationItem } from "@/lib/dashboard-types";
 import styles from "@/app/page.module.css";
 
 export type StatFilter =
@@ -36,29 +37,6 @@ function formatTimestamp(iso: string): string {
   }
 }
 
-function statusClass(status: string): string {
-  switch (status) {
-    case "open":
-      return styles.open;
-    case "reminded":
-      return styles.reminded;
-    case "draft_awaiting_approval":
-      return styles.draft_awaiting_approval;
-    case "uncertain_needs_review":
-      return styles.uncertain_needs_review;
-    case "resolved":
-      return styles.resolved;
-    case "resolved_by_history":
-      return styles.resolved_by_history;
-    case "dismissed":
-      return styles.dismissed;
-    case "suppressed":
-      return styles.suppressed;
-    default:
-      return "";
-  }
-}
-
 export default function PageClient({
   allItems,
   whatsappCount,
@@ -71,6 +49,7 @@ export default function PageClient({
   emailWarning,
 }: PageClientProps) {
   const [filter, setFilter] = useState<StatFilter>("all");
+  const [selectedId, setSelectedId] = useState<string | null>(null);
 
   const filteredItems = useMemo(() => {
     switch (filter) {
@@ -88,6 +67,17 @@ export default function PageClient({
         return allItems;
     }
   }, [filter, allItems]);
+
+  const selectedItem = useMemo(
+    () => filteredItems.find((item) => item.id === selectedId) ?? null,
+    [filteredItems, selectedId],
+  );
+
+  useEffect(() => {
+    if (selectedId && !filteredItems.some((item) => item.id === selectedId)) {
+      setSelectedId(null);
+    }
+  }, [filteredItems, selectedId]);
 
   const totalCount = allItems.length;
   const filteredCount = filteredItems.length;
@@ -196,66 +186,52 @@ export default function PageClient({
         </div>
       )}
 
-      {/* ── Item list ────────────────────────────────────────────────────── */}
-      {filteredItems.length === 0 ? (
-        <div className={styles.emptyState} role="status">
-          <span className={styles.emptyIcon} aria-hidden="true">
-            {isFiltered ? "🔎" : "📭"}
-          </span>
-          <p className={styles.emptyTitle}>
-            {isFiltered ? "No matching items" : "No items"}
-          </p>
-          <p className={styles.emptyBody}>
-            {isFiltered
-              ? "Try a different filter or clear it to see all items."
-              : "Items will appear here once sources are connected."}
-          </p>
-          {isFiltered && (
-            <button
-              type="button"
-              className={styles.filterClearBtn}
-              onClick={() => setFilter("all")}
-            >
-              Clear filter
-            </button>
+      <section className={styles.summaryWorkspace} aria-label="Summary feed and inspector">
+        <div className={styles.feedPanel}>
+          {filteredItems.length === 0 ? (
+            <div className={styles.emptyState} role="status">
+              <span className={styles.emptyIcon} aria-hidden="true">
+                {isFiltered ? "🔎" : "📭"}
+              </span>
+              <p className={styles.emptyTitle}>
+                {isFiltered ? "No matching items" : "No items"}
+              </p>
+              <p className={styles.emptyBody}>
+                {isFiltered
+                  ? "Try a different filter or clear it to see all items."
+                  : "Items will appear here once sources are connected."}
+              </p>
+              {isFiltered && (
+                <button
+                  type="button"
+                  className={styles.filterClearBtn}
+                  onClick={() => setFilter("all")}
+                >
+                  Clear filter
+                </button>
+              )}
+            </div>
+          ) : (
+            <CompactFeed
+              items={filteredItems}
+              selectedId={selectedId}
+              onSelect={(item) => setSelectedId(item?.id ?? null)}
+              label="Compact message feed"
+            />
           )}
         </div>
-      ) : (
-        <ul className={styles.list} role="list">
-          {filteredItems.map((item) => (
-            <li key={item.id} className={styles.item}>
-              <div className={styles.itemTop}>
-                <span
-                  className={`${styles.platform} ${
-                    item.source === "whatsapp" ? styles.wa : styles.em
-                  }`}
-                >
-                  {item.source === "whatsapp" ? "WhatsApp" : "Email"}
-                </span>
-                <span className={`${styles.statusBadge} ${statusClass(item.status)}`}>
-                  {item.status.replace(/_/g, " ")}
-                </span>
-              </div>
-              <p className={styles.itemTitle}>{item.title}</p>
-              <p className={styles.itemContext}>{item.context}</p>
-              {item.source === "whatsapp" && (
-                <div className={styles.itemLinks}>
-                  <Link href="/whatsapp" className={styles.itemLink}>
-                    View WhatsApp
-                  </Link>
-                </div>
-              )}
-              {item.source === "email" && (
-                <div className={styles.itemLinks}>
-                  <Link href="/emails" className={styles.itemLink}>
-                    View email
-                  </Link>
-                </div>
-              )}
-            </li>
-          ))}
-        </ul>
-      )}
+
+        <div className={styles.inspectorPanel}>
+          <DetailInspector
+            item={selectedItem}
+            ariaLabel={
+              selectedItem
+                ? `Selected item details for ${selectedItem.title}`
+                : "Item detail inspector"
+            }
+          />
+        </div>
+      </section>
 
       {/* ── Source freshness indicators ─────────────────────────────────── */}
       {(whatsappTimestamp || emailTimestamp) && (
