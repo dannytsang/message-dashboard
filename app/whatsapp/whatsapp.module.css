@@ -176,6 +176,14 @@
   min-width: 0;
 }
 
+.filterControls {
+  display: flex;
+  align-items: center;
+  gap: var(--space-sm);
+  flex-wrap: wrap;
+  min-width: 0;
+}
+
 .sortWrap {
   display: inline-flex;
   align-items: center;
@@ -698,6 +706,11 @@
 
   .compactMeta {
     text-align: left;
+  }
+
+  .filterControls {
+    align-items: stretch;
+    flex-direction: column;
   }
 
   .sortWrap {

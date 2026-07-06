@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
   formatDashboardDateTime,
   formatDashboardRelativeDateTime,
@@ -28,6 +28,8 @@ interface ConversationBucket {
   items: WhatsAppConversationItem[];
 }
 
+type ConversationKindFilter = "all" | "group" | "direct";
+
 const conversationSortLabels: Record<WhatsAppConversationSortMode, string> = {
   "latest-message": "Latest message",
   "name-a-z": "Name A–Z",
@@ -36,6 +38,12 @@ const conversationSortLabels: Record<WhatsAppConversationSortMode, string> = {
 const followUpSortLabels: Record<WhatsAppFollowUpSortMode, string> = {
   "due-soonest": "Due soonest",
   "name-a-z": "Name A–Z",
+};
+
+const conversationKindFilterLabels: Record<ConversationKindFilter, string> = {
+  all: "All chats",
+  group: "Groups",
+  direct: "Direct",
 };
 
 const followUpStateLabels: Record<WhatsAppFollowUpState, string> = {
@@ -67,6 +75,13 @@ function normalizeQuery(query: string) {
 function matchesDisplayName(displayName: string, query: string) {
   if (!query) return true;
   return displayName.toLocaleLowerCase().includes(query);
+}
+
+function matchesConversationKind(
+  item: WhatsAppConversationItem,
+  kindFilter: ConversationKindFilter,
+) {
+  return kindFilter === "all" || item.kind === kindFilter;
 }
 
 function compareConversationByLatest(
@@ -229,6 +244,9 @@ export default function WhatsAppDashboardPage({
   const [monitoredSort, setMonitoredSort] =
     useState<WhatsAppConversationSortMode>("latest-message");
   const [draftsSort, setDraftsSort] = useState<WhatsAppConversationSortMode>("latest-message");
+  const [monitoredKindFilter, setMonitoredKindFilter] =
+    useState<ConversationKindFilter>("all");
+  const [draftsKindFilter, setDraftsKindFilter] = useState<ConversationKindFilter>("all");
   const [followUpSort, setFollowUpSort] =
     useState<WhatsAppFollowUpSortMode>("due-soonest");
   const [selection, setSelection] = useState<{
@@ -253,18 +271,26 @@ export default function WhatsAppDashboardPage({
   const monitoredItems = useMemo(() => {
     const query = normalizeQuery(monitoredQuery);
     return sortConversations(
-      snapshot.monitored.filter((item) => matchesDisplayName(item.displayName, query)),
+      snapshot.monitored.filter(
+        (item) =>
+          matchesDisplayName(item.displayName, query) &&
+          matchesConversationKind(item, monitoredKindFilter),
+      ),
       monitoredSort,
     );
-  }, [monitoredQuery, monitoredSort, snapshot.monitored]);
+  }, [monitoredKindFilter, monitoredQuery, monitoredSort, snapshot.monitored]);
 
   const draftItems = useMemo(() => {
     const query = normalizeQuery(draftsQuery);
     return sortConversations(
-      snapshot.drafts.filter((item) => matchesDisplayName(item.displayName, query)),
+      snapshot.drafts.filter(
+        (item) =>
+          matchesDisplayName(item.displayName, query) &&
+          matchesConversationKind(item, draftsKindFilter),
+      ),
       draftsSort,
     );
-  }, [draftsQuery, draftsSort, snapshot.drafts]);
+  }, [draftsKindFilter, draftsQuery, draftsSort, snapshot.drafts]);
 
   const monitoredBuckets = useMemo(
     () => bucketConversationItems(monitoredItems, snapshot.generatedAt),
@@ -283,6 +309,15 @@ export default function WhatsAppDashboardPage({
       followUpSort,
     );
   }, [followUpQuery, followUpSort, snapshot.followUps]);
+
+  useEffect(() => {
+    if (!selection) return;
+
+    const visibleItems = selection.origin === "monitored" ? monitoredItems : draftItems;
+    if (!visibleItems.some((item) => item.id === selection.conversationId)) {
+      setSelection(null);
+    }
+  }, [draftItems, monitoredItems, selection]);
 
   const selectedFollowUps = selectedConversation
     ? snapshot.followUps.filter((item) => item.conversationId === selectedConversation.id)
@@ -313,6 +348,8 @@ export default function WhatsAppDashboardPage({
               searchPlaceholder="Search monitored by display name"
               sort={monitoredSort}
               onSortChange={setMonitoredSort}
+              kindFilter={monitoredKindFilter}
+              onKindFilterChange={setMonitoredKindFilter}
               buckets={monitoredBuckets}
               origin="monitored"
               selectedConversationId={selection?.conversationId ?? null}
@@ -334,6 +371,8 @@ export default function WhatsAppDashboardPage({
               searchPlaceholder="Search drafts by display name"
               sort={draftsSort}
               onSortChange={setDraftsSort}
+              kindFilter={draftsKindFilter}
+              onKindFilterChange={setDraftsKindFilter}
               buckets={draftBuckets}
               origin="drafts"
               selectedConversationId={selection?.conversationId ?? null}
@@ -377,6 +416,8 @@ interface ConversationSectionProps {
   searchPlaceholder: string;
   sort: WhatsAppConversationSortMode;
   onSortChange: (value: WhatsAppConversationSortMode) => void;
+  kindFilter: ConversationKindFilter;
+  onKindFilterChange: (value: ConversationKindFilter) => void;
   buckets: ConversationBucket[];
   origin: WhatsAppConversationListKey;
   selectedConversationId: string | null;
@@ -394,6 +435,8 @@ function ConversationSection({
   searchPlaceholder,
   sort,
   onSortChange,
+  kindFilter,
+  onKindFilterChange,
   buckets,
   origin,
   selectedConversationId,
@@ -424,22 +467,42 @@ function ConversationSection({
         />
 
         <div className={styles.controlsRow}>
-          <div className={styles.sortWrap}>
-            <label className={styles.sortLabel} htmlFor={`${origin}-sort`}>
-              Sort
-            </label>
-            <select
-              id={`${origin}-sort`}
-              className={styles.sortSelect}
-              value={sort}
-              onChange={(event) => onSortChange(event.target.value as WhatsAppConversationSortMode)}
-            >
-              {Object.entries(conversationSortLabels).map(([value, label]) => (
-                <option key={value} value={value}>
-                  {label}
-                </option>
-              ))}
-            </select>
+          <div className={styles.filterControls}>
+            <div className={styles.sortWrap}>
+              <label className={styles.sortLabel} htmlFor={`${origin}-kind`}>
+                Type
+              </label>
+              <select
+                id={`${origin}-kind`}
+                className={styles.sortSelect}
+                value={kindFilter}
+                onChange={(event) => onKindFilterChange(event.target.value as ConversationKindFilter)}
+              >
+                {Object.entries(conversationKindFilterLabels).map(([value, label]) => (
+                  <option key={value} value={value}>
+                    {label}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            <div className={styles.sortWrap}>
+              <label className={styles.sortLabel} htmlFor={`${origin}-sort`}>
+                Sort
+              </label>
+              <select
+                id={`${origin}-sort`}
+                className={styles.sortSelect}
+                value={sort}
+                onChange={(event) => onSortChange(event.target.value as WhatsAppConversationSortMode)}
+              >
+                {Object.entries(conversationSortLabels).map(([value, label]) => (
+                  <option key={value} value={value}>
+                    {label}
+                  </option>
+                ))}
+              </select>
+            </div>
           </div>
           <span className={styles.metaLabel}>Read-only conversation list · {visibleCount} visible</span>
         </div>
