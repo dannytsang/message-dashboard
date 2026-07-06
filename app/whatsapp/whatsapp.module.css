@@ -30,17 +30,28 @@
 }
 
 .splitPane {
+  --whatsapp-pane-top: calc(var(--nav-height) + var(--space-md));
+  --whatsapp-pane-height: calc(100vh - var(--whatsapp-pane-top) - var(--space-md));
   display: grid;
   gap: var(--space-lg);
   grid-template-columns: minmax(320px, 0.95fr) minmax(0, 1.45fr);
   align-items: start;
+  min-height: 0;
+  min-width: 0;
 }
 
 .sidePane {
   display: grid;
   gap: var(--space-md);
   min-width: 0;
-  overflow: hidden;
+  min-height: 0;
+  max-height: var(--whatsapp-pane-height);
+  overflow: hidden auto;
+  overscroll-behavior: contain;
+  padding-right: 4px;
+  position: sticky;
+  scrollbar-gutter: stable;
+  top: var(--whatsapp-pane-top);
 }
 
 .historyPane {
@@ -50,8 +61,15 @@
   padding: var(--space-lg);
   display: grid;
   gap: var(--space-md);
-  min-height: 100%;
+  align-self: start;
+  max-height: var(--whatsapp-pane-height);
+  min-height: min(620px, var(--whatsapp-pane-height));
   min-width: 0;
+  overflow: hidden auto;
+  overscroll-behavior: contain;
+  position: sticky;
+  scrollbar-gutter: stable;
+  top: var(--whatsapp-pane-top);
 }
 
 .sectionCard {
@@ -478,6 +496,7 @@
 .historyBody {
   display: grid;
   gap: var(--space-md);
+  min-width: 0;
 }
 
 .historyCards {
@@ -512,6 +531,7 @@
   list-style: none;
   display: grid;
   gap: var(--space-sm);
+  min-width: 0;
 }
 
 .timelineItem {
@@ -520,6 +540,8 @@
   padding: var(--space-sm);
   display: grid;
   gap: 8px;
+  min-width: 0;
+  overflow: hidden;
 }
 
 .timelineTop {
@@ -535,6 +557,7 @@
   align-items: center;
   gap: 8px;
   flex-wrap: wrap;
+  min-width: 0;
 }
 
 .timelineSpeaker {
@@ -636,6 +659,16 @@
 @media (max-width: 980px) {
   .splitPane {
     grid-template-columns: 1fr;
+  }
+
+  .sidePane,
+  .historyPane {
+    max-height: none;
+    min-height: 0;
+    overflow: visible;
+    padding-right: 0;
+    position: static;
+    scrollbar-gutter: auto;
   }
 
   .historyPane {

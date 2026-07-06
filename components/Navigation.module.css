@@ -47,7 +47,7 @@
   max-width: var(--width-content);
   margin: 0 auto;
   padding: 0 var(--gutter);
-  height: 56px;
+  height: var(--nav-height);
   display: flex;
   align-items: center;
   justify-content: space-between;
