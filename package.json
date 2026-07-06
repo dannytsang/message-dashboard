@@ -7,8 +7,7 @@
     "build": "next build",
     "start": "next start",
     "lint": "next lint",
-    "test": "tsx scripts/test-mode.ts",
-    "test:demo": "FORCE_DEMO_MODE=true tsx scripts/test-mode.ts"
+    "test": "tsx scripts/test-mode.ts"
   },
   "dependencies": {
     "@vercel/blob": "^2.5.0",

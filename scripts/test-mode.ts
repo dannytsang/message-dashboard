@@ -8,12 +8,10 @@
  *
  * Run with:
  *   npx tsx scripts/test-mode.ts
- *   FORCE_DEMO_MODE=true npx tsx scripts/test-mode.ts
  *
  * Acceptance criteria covered:
  *   - blob-unavailable activation        → env: no BLOB_READ_WRITE_TOKEN
- *   - FORCE_DEMO_MODE activation        → env: FORCE_DEMO_MODE=true
- *   - cookie=demo forces demo             → no Blob/force-demo required
+ *   - cookie=demo forces demo             → no Blob required
  *   - cookie=live honoured only w/ Blob   → falls back to demo when Blob absent
  *   - missing/invalid cookie → runtime mode
  *   - banner visibility in demo mode      → showDemoBanner: true
@@ -40,11 +38,6 @@ interface DashboardShellModeState {
 }
 
 // Mirrors lib/site-mode.ts — keep in sync with the actual implementation
-function isForceDemoModeEnabled(): boolean {
-  const value = process.env.FORCE_DEMO_MODE;
-  return typeof value === "string" && ["1", "true", "yes", "on"].includes(value.trim().toLowerCase());
-}
-
 function isBlobUnavailable(): boolean {
   const token = process.env.BLOB_READ_WRITE_TOKEN ?? process.env.VERCEL_BLOB_READ_WRITE_TOKEN;
   return !token || token.trim() === "";
@@ -66,12 +59,11 @@ function applyUserOverride(
 
 function getSiteMode(): DashboardSiteModeDecision {
   const reasons: Array<"blob_unavailable"> = [];
-  const forceDemo = isForceDemoModeEnabled();
   const blobUnavailable = isBlobUnavailable();
 
   if (blobUnavailable) reasons.push("blob_unavailable");
 
-  const runtimeMode: DashboardSiteMode = forceDemo || blobUnavailable ? "demo" : "live";
+  const runtimeMode: DashboardSiteMode = blobUnavailable ? "demo" : "live";
   return { mode: runtimeMode, reasons };
 }
 
@@ -226,7 +218,7 @@ tests.push({
 tests.push({
   name: "Cookie override: cookie=demo forces demo even when runtime would be live",
   run: () => {
-    // Simulate: Blob available + no FORCE_DEMO_MODE → runtime=live
+    // Simulate: Blob available → runtime=live
     // But cookie says demo → final must be demo
     // We test applyUserOverride directly with a runtime=live, blobAvailable=false
     const result = applyUserOverride("live", "demo", false);

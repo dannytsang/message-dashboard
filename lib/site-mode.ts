@@ -6,10 +6,9 @@
  *
  * Triggers (any one activates demo mode):
  *  - BLOB_READ_WRITE_TOKEN / VERCEL_BLOB_READ_WRITE_TOKEN missing or empty  (blob unavailable)
- *  - FORCE_DEMO_MODE env flag is set                                          (operator override)
  *  - user has set the demo-mode cookie (`dashboard-demo-mode=demo`)            (authenticated toggle)
  *
- * Live mode when: Blob is available AND FORCE_DEMO_MODE is not set AND cookie is not `demo`.
+ * Live mode when: Blob is available AND cookie is not `demo`.
  */
 
 import "server-only";
@@ -47,14 +46,6 @@ function isBlobUnavailable(): boolean {
   const token = process.env.BLOB_READ_WRITE_TOKEN ?? process.env.VERCEL_BLOB_READ_WRITE_TOKEN;
   // Treat empty string or missing token as unavailable
   return !token || token.trim() === "";
-}
-
-/**
- * True when the operator has set FORCE_DEMO_MODE to a truthy value.
- */
-function isForceDemoModeEnabled(): boolean {
-  const value = process.env.FORCE_DEMO_MODE;
-  return typeof value === "string" && ["1", "true", "yes", "on"].includes(value.trim().toLowerCase());
 }
 
 // ── Cookie authority (server-only) ─────────────────────────────────────────────
@@ -115,15 +106,13 @@ function applyUserOverride(
  */
 export function getSiteMode(): DashboardSiteModeDecision {
   const reasons: Array<"blob_unavailable"> = [];
-  const forceDemo = isForceDemoModeEnabled();
   const blobUnavailable = isBlobUnavailable();
 
   if (blobUnavailable) {
     reasons.push("blob_unavailable");
   }
 
-  const runtimeMode: DashboardSiteMode =
-    forceDemo || blobUnavailable ? "demo" : "live";
+  const runtimeMode: DashboardSiteMode = blobUnavailable ? "demo" : "live";
 
   // Apply cookie override in trusted server-side context
   const userOverride = readDemoModeCookie();
