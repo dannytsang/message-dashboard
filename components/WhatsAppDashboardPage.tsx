@@ -448,63 +448,65 @@ function ConversationSection({
 
   return (
     <section className={styles.sectionCard} aria-labelledby={`${origin}-title`}>
-      <div className={styles.sectionHeader}>
-        <div className={styles.sectionTitleWrap}>
-          <h2 id={`${origin}-title`} className={styles.sectionTitle}>
-            {title}
-          </h2>
-          <p className={styles.sectionSubtitle}>{subtitle}</p>
-        </div>
-        <span className={styles.countPill}>{countLabel}</span>
-      </div>
-
-      <div className={styles.controls}>
-        <SearchInput
-          value={searchValue}
-          onChange={onSearchChange}
-          placeholder={searchPlaceholder}
-          ariaLabel={`${title} search by display name`}
-        />
-
-        <div className={styles.controlsRow}>
-          <div className={styles.filterControls}>
-            <div className={styles.sortWrap}>
-              <label className={styles.sortLabel} htmlFor={`${origin}-kind`}>
-                Type
-              </label>
-              <select
-                id={`${origin}-kind`}
-                className={styles.sortSelect}
-                value={kindFilter}
-                onChange={(event) => onKindFilterChange(event.target.value as ConversationKindFilter)}
-              >
-                {Object.entries(conversationKindFilterLabels).map(([value, label]) => (
-                  <option key={value} value={value}>
-                    {label}
-                  </option>
-                ))}
-              </select>
-            </div>
-
-            <div className={styles.sortWrap}>
-              <label className={styles.sortLabel} htmlFor={`${origin}-sort`}>
-                Sort
-              </label>
-              <select
-                id={`${origin}-sort`}
-                className={styles.sortSelect}
-                value={sort}
-                onChange={(event) => onSortChange(event.target.value as WhatsAppConversationSortMode)}
-              >
-                {Object.entries(conversationSortLabels).map(([value, label]) => (
-                  <option key={value} value={value}>
-                    {label}
-                  </option>
-                ))}
-              </select>
-            </div>
+      <div className={styles.stickySectionControls}>
+        <div className={styles.sectionHeader}>
+          <div className={styles.sectionTitleWrap}>
+            <h2 id={`${origin}-title`} className={styles.sectionTitle}>
+              {title}
+            </h2>
+            <p className={styles.sectionSubtitle}>{subtitle}</p>
           </div>
-          <span className={styles.metaLabel}>Read-only conversation list · {visibleCount} visible</span>
+          <span className={styles.countPill}>{countLabel}</span>
+        </div>
+
+        <div className={styles.controls}>
+          <SearchInput
+            value={searchValue}
+            onChange={onSearchChange}
+            placeholder={searchPlaceholder}
+            ariaLabel={`${title} search by display name`}
+          />
+
+          <div className={styles.controlsRow}>
+            <div className={styles.filterControls}>
+              <div className={styles.sortWrap}>
+                <label className={styles.sortLabel} htmlFor={`${origin}-kind`}>
+                  Type
+                </label>
+                <select
+                  id={`${origin}-kind`}
+                  className={styles.sortSelect}
+                  value={kindFilter}
+                  onChange={(event) => onKindFilterChange(event.target.value as ConversationKindFilter)}
+                >
+                  {Object.entries(conversationKindFilterLabels).map(([value, label]) => (
+                    <option key={value} value={value}>
+                      {label}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div className={styles.sortWrap}>
+                <label className={styles.sortLabel} htmlFor={`${origin}-sort`}>
+                  Sort
+                </label>
+                <select
+                  id={`${origin}-sort`}
+                  className={styles.sortSelect}
+                  value={sort}
+                  onChange={(event) => onSortChange(event.target.value as WhatsAppConversationSortMode)}
+                >
+                  {Object.entries(conversationSortLabels).map(([value, label]) => (
+                    <option key={value} value={value}>
+                      {label}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            </div>
+            <span className={styles.metaLabel}>Read-only conversation list · {visibleCount} visible</span>
+          </div>
         </div>
       </div>
 

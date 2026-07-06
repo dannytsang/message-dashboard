@@ -118,7 +118,26 @@
   display: grid;
   gap: var(--space-sm);
   min-width: 0;
-  overflow: hidden;
+  overflow: visible;
+}
+
+.stickySectionControls {
+  position: sticky;
+  top: 0;
+  z-index: 3;
+  display: grid;
+  gap: var(--space-sm);
+  margin: calc(-1 * var(--space-md)) calc(-1 * var(--space-md)) 0;
+  padding: var(--space-md) var(--space-md) var(--space-sm);
+  background:
+    linear-gradient(180deg, var(--color-surface) 0%, var(--color-surface) 82%, rgba(26, 29, 39, 0));
+  border-radius: var(--radius) var(--radius) 0 0;
+  backdrop-filter: blur(10px);
+}
+
+[data-theme="light"] .stickySectionControls {
+  background:
+    linear-gradient(180deg, var(--color-surface) 0%, var(--color-surface) 82%, rgba(255, 255, 255, 0));
 }
 
 .sectionHeader {
@@ -715,6 +734,10 @@
     padding-right: 0;
     position: static;
     scrollbar-gutter: auto;
+  }
+
+  .stickySectionControls {
+    position: static;
   }
 
   .historyPane {
