@@ -32,6 +32,10 @@
   --space-lg:  clamp(24px, 4vw,  48px);
   --space-xl:  clamp(32px, 5vw,  64px);
   --nav-height: 56px;
+  /* Shared sticky/top offset for the Summary page split pane.
+     Covers nav + page header + stat bar + sort bar.
+     Updated here drives sticky top values in page.module.css. */
+  --header-offset: 220px;
 }
 
 /* Light theme — applied via data-theme="light" on <html> */

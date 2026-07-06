@@ -62,6 +62,7 @@ export default async function HomePage() {
             (row.identifiedAction?.actionPhrase
               ? `Action: ${row.identifiedAction.actionPhrase}`
               : "No action identified"),
+          receivedAt: row.receivedAt ?? row.receivedDateTime,
         }))
       : [];
 
@@ -91,6 +92,10 @@ export default async function HomePage() {
           : "contextSummary" in item
             ? (item as { contextSummary: string }).contextSummary
             : "",
+      receivedAt:
+        "lastMessageAt" in item
+          ? (item as { lastMessageAt?: string }).lastMessageAt
+          : undefined,
     }));
 
     mergedItems.push(...waItems);

@@ -12,6 +12,23 @@ export interface CompactFeedProps {
   label: string;
 }
 
+/**
+ * Derive a safe user-facing label for a row's received/occurred timestamp.
+ * Returns null when no valid timestamp is available.
+ */
+function receivedDateLabel(item: CommunicationItem): string | null {
+  if (!item.receivedAt) return null;
+  try {
+    return new Intl.DateTimeFormat("en-GB", {
+      dateStyle: "medium",
+      timeStyle: "short",
+      timeZone: "UTC",
+    }).format(new Date(item.receivedAt));
+  } catch {
+    return null;
+  }
+}
+
 function statusClass(status: string): string {
   switch (status) {
     case "open":
@@ -60,6 +77,7 @@ export default function CompactFeed({
       {items.map((item, index) => {
         const isSelected = item.id === selectedId;
         const isTabStop = isSelected || (selectedIndex === -1 && index === 0);
+        const dateLabel = receivedDateLabel(item);
 
         return (
           <li key={item.id} className={styles.compactRowItem} role="presentation">
@@ -108,8 +126,8 @@ export default function CompactFeed({
                 </span>
               </span>
 
-              <span className={styles.compactRowFreshness}>
-                {item.updatedAt ? "Updated" : ""}
+              <span className={styles.compactRowDate} aria-label="Received">
+                {dateLabel ?? "Date unavailable"}
               </span>
             </button>
           </li>

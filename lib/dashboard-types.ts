@@ -20,6 +20,8 @@ export interface CommunicationItem {
   urgency?: "low" | "normal" | "high";
   updatedAt?: string;
   dueAt?: string;
+  /** Safe user-facing received/occurred-at timestamp for the item (ISO 8601). */
+  receivedAt?: string;
   displayName?: string;
   metadata?: Record<string, string | number | boolean | null>;
 }

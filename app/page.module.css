@@ -128,6 +128,49 @@
   color: var(--color-text-primary);
 }
 
+/* ── Sort bar (spec 013 FR-010) ───────────────────────────────────────── */
+
+.sortBar {
+  display: flex;
+  align-items: center;
+  gap: var(--space-xs);
+  margin-bottom: var(--space-md);
+  flex-wrap: wrap;
+}
+
+.sortLabel {
+  font-size: 0.8125rem;
+  font-weight: 600;
+  color: var(--color-text-muted);
+  margin-right: 4px;
+}
+
+.sortButton {
+  display: inline-flex;
+  align-items: center;
+  padding: 5px 12px;
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: 6px;
+  font-family: var(--font-stack);
+  font-size: 0.8125rem;
+  color: var(--color-text-secondary);
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.sortButton:hover {
+  border-color: var(--color-accent);
+  color: var(--color-text-primary);
+}
+
+.sortButtonActive {
+  background: var(--color-accent-dim);
+  border-color: var(--color-accent);
+  color: var(--color-accent);
+  font-weight: 600;
+}
+
 /* ── Source-level warnings ─────────────────────────────────────────────── */
 
 .sourceWarning {
@@ -154,24 +197,43 @@
   line-height: 1.5;
 }
 
-/* ── Summary workspace (Variant 3) ─────────────────────────────────────── */
+/* ── Summary workspace — Variant 3 split-pane (spec 013 FR-009/FR-011) ── */
 
 .summaryWorkspace {
+  /* Two-column grid: narrow feed + wide inspector */
   display: grid;
-  grid-template-columns: minmax(0, 1.05fr) minmax(320px, 0.95fr);
+  grid-template-columns: minmax(0, 1fr) minmax(320px, 1fr);
   gap: var(--space-lg);
   align-items: start;
   margin-top: var(--space-md);
 }
 
+/* Feed panel: constrained to available viewport height with internal scroll */
 .feedPanel {
   min-width: 0;
-  max-width: 48rem;
+  /* On desktop: fixed max-height so the list scrolls internally.
+     The value covers the full viewport minus header elements above it.
+     --header-offset is defined in globals.css. */
+  max-height: calc(100vh - var(--header-offset));
+  overflow-y: auto;
+  /* Smooth scroll within the panel */
+  scroll-behavior: smooth;
+  /* Ensure the panel itself doesn't become sticky or float */
+  position: relative;
 }
 
+/* Inspector panel: sticky, scrolls internally if content overflows */
 .inspectorPanel {
   min-width: 0;
+  position: sticky;
+  top: var(--header-offset);
+  /* Constrain to viewport so inspector content can overflow-y internally */
+  max-height: calc(100vh - var(--header-offset));
+  overflow-y: auto;
+  align-self: start;
 }
+
+/* ── Compact list rows (spec 013 FR-009) ──────────────────────────────── */
 
 .compactList {
   list-style: none;
@@ -256,23 +318,32 @@
   font-size: 0.625rem;
 }
 
-.compactRowFreshness {
+/* Received date label shown on the right side of each compact row */
+.compactRowDate {
   font-size: 0.6875rem;
-  font-weight: 600;
-  letter-spacing: 0.04em;
-  text-transform: uppercase;
+  font-weight: 500;
   color: var(--color-text-muted);
   white-space: nowrap;
+  text-align: right;
+  min-width: 0;
+  max-width: 11rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
+/* ── Detail inspector (spec 013 FR-009) ───────────────────────────────── */
+
+/* The inspector <aside> itself is positioned by .inspectorPanel above.
+   This class provides the visual card styling and internal layout. */
 .inspector {
-  position: sticky;
-  top: var(--space-lg);
   min-width: 0;
   padding: var(--space-lg);
   border: 1px solid var(--color-border);
   border-radius: var(--radius);
   background: var(--color-surface);
+  /* Internal scroll is handled by .inspectorPanel; this ensures the card
+     itself has a defined background and border regardless of scroll state. */
+  position: relative;
 }
 
 .inspectorSelected,
@@ -283,7 +354,7 @@
 }
 
 .inspectorNeutral {
-  min-height: 22rem;
+  min-height: 20rem;
   align-items: center;
   justify-content: center;
   text-align: center;
@@ -579,7 +650,7 @@
   overflow-wrap: anywhere;
 }
 
-/* ── Empty / zero-result states ──────────────────────────────────────────── */
+/* ── Empty / zero-result states ─────────────────────────────────────────── */
 
 .emptyState {
   display: flex;
@@ -652,20 +723,29 @@
 
 /* ── Responsive ───────────────────────────────────────────────────────────── */
 
-@media (max-width: 960px) {
+/* Narrow/mobile: stack feed above inspector, disable desktop split-pane */
+@media (max-width: 900px) {
   .summaryWorkspace {
     grid-template-columns: 1fr;
   }
 
+  /* Remove the constrained max-height so feed flows to its natural height */
   .feedPanel {
-    max-width: none;
+    max-height: none;
+    overflow-y: visible;
   }
 
-  .inspector {
+  /* InspectorPanel becomes static — stacks below feed in normal flow */
+  .inspectorPanel {
     position: static;
+    max-height: none;
+    overflow-y: visible;
+    /* Ensure inspector card has full width when stacked */
+    width: 100%;
   }
 }
 
+/* Very small screens: reduce row padding and hide date labels to save space */
 @media (max-width: 640px) {
   .metaGrid {
     grid-template-columns: 1fr;
@@ -677,13 +757,24 @@
 
   .compactRowButton {
     grid-template-columns: auto minmax(0, 1fr);
+    padding: 8px 10px;
   }
 
-  .compactRowFreshness {
+  /* Hide the received date on very narrow screens */
+  .compactRowDate {
     display: none;
   }
 
   .inspector {
     padding: var(--space-md);
+  }
+
+  .sortBar {
+    gap: 6px;
+  }
+
+  .sortButton {
+    padding: 4px 10px;
+    font-size: 0.75rem;
   }
 }

@@ -13,6 +13,8 @@ export type StatFilter =
   | "open"
   | "needs-review";
 
+export type SortMode = "latest-received" | "oldest-received";
+
 interface PageClientProps {
   allItems: CommunicationItem[];
   whatsappCount: number;
@@ -37,6 +39,54 @@ function formatTimestamp(iso: string): string {
   }
 }
 
+/**
+ * Derive a stable received-at label for a CommunicationItem.
+ * Returns null when no valid timestamp is available.
+ */
+function receivedDateLabel(item: CommunicationItem): string | null {
+  if (!item.receivedAt) return null;
+  try {
+    return formatTimestamp(item.receivedAt);
+  } catch {
+    return null;
+  }
+}
+
+/** Map a SortMode to a human-facing label for the active sort button. */
+function sortLabel(mode: SortMode): string {
+  switch (mode) {
+    case "latest-received":
+      return "Latest received";
+    case "oldest-received":
+      return "Oldest received";
+  }
+}
+
+/**
+ * Sort comparator for the Summary feed.
+ * Items with a valid receivedAt come before those without.
+ * Dated items sort by timestamp ascending or descending per mode.
+ */
+function compareItems(a: CommunicationItem, b: CommunicationItem, mode: SortMode): number {
+  const aLabel = receivedDateLabel(a);
+  const bLabel = receivedDateLabel(b);
+
+  // Both undated — maintain original order
+  if (!aLabel && !bLabel) return 0;
+  // a undated, b dated — b comes first
+  if (!aLabel) return 1;
+  // a dated, b undated — a comes first
+  if (!bLabel) return -1;
+
+  const aTime = new Date(a.receivedAt!).getTime();
+  const bTime = new Date(b.receivedAt!).getTime();
+  if (Number.isNaN(aTime) && Number.isNaN(bTime)) return 0;
+  if (Number.isNaN(aTime)) return 1;
+  if (Number.isNaN(bTime)) return -1;
+
+  return mode === "latest-received" ? bTime - aTime : aTime - bTime;
+}
+
 export default function PageClient({
   allItems,
   whatsappCount,
@@ -49,8 +99,10 @@ export default function PageClient({
   emailWarning,
 }: PageClientProps) {
   const [filter, setFilter] = useState<StatFilter>("all");
+  const [sortMode, setSortMode] = useState<SortMode>("latest-received");
   const [selectedId, setSelectedId] = useState<string | null>(null);
 
+  // 1. Apply statistic filter to derive the base visible set
   const filteredItems = useMemo(() => {
     switch (filter) {
       case "whatsapp":
@@ -68,25 +120,38 @@ export default function PageClient({
     }
   }, [filter, allItems]);
 
-  const selectedItem = useMemo(
-    () => filteredItems.find((item) => item.id === selectedId) ?? null,
-    [filteredItems, selectedId],
+  // 2. Apply sort to the filtered set
+  const sortedFilteredItems = useMemo(
+    () => [...filteredItems].sort((a, b) => compareItems(a, b, sortMode)),
+    [filteredItems, sortMode],
   );
 
+  const selectedItem = useMemo(
+    () => sortedFilteredItems.find((item) => item.id === selectedId) ?? null,
+    [sortedFilteredItems, selectedId],
+  );
+
+  // Reset selection when the selected item is no longer in the sorted+filtered set
   useEffect(() => {
-    if (selectedId && !filteredItems.some((item) => item.id === selectedId)) {
+    if (selectedId && !sortedFilteredItems.some((item) => item.id === selectedId)) {
       setSelectedId(null);
     }
-  }, [filteredItems, selectedId]);
+  }, [sortedFilteredItems, selectedId]);
 
   const totalCount = allItems.length;
-  const filteredCount = filteredItems.length;
+  const filteredCount = sortedFilteredItems.length;
   const isFiltered = filter !== "all";
 
   const filterLabel =
     filter === "all"
       ? `${totalCount} item${totalCount !== 1 ? "s" : ""}`
       : `${filteredCount} of ${totalCount} items`;
+
+  const handleSortChange = (newMode: SortMode) => {
+    setSortMode(newMode);
+    // Selection is preserved only if the selected row remains visible after re-sort;
+    // the useEffect above handles the case where it disappears.
+  };
 
   return (
     <main className={styles.page}>
@@ -162,6 +227,30 @@ export default function PageClient({
         </p>
       )}
 
+      {/* ── Sort controls ────────────────────────────────────────────────── */}
+      <div className={styles.sortBar} role="group" aria-label="Sort feed">
+        <span className={styles.sortLabel} id="sort-label">
+          Sort:
+        </span>
+        {(
+          [
+            ["latest-received", "Latest received"],
+            ["oldest-received", "Oldest received"],
+          ] as [SortMode, string][]
+        ).map(([mode, label]) => (
+          <button
+            key={mode}
+            type="button"
+            className={`${styles.sortButton} ${sortMode === mode ? styles.sortButtonActive : ""}`}
+            onClick={() => handleSortChange(mode)}
+            aria-pressed={sortMode === mode}
+            aria-describedby="sort-label"
+          >
+            {label}
+          </button>
+        ))}
+      </div>
+
       {/* ── Source-level warnings / partial availability ────────────────── */}
       {whatsappWarning && (
         <div className={styles.sourceWarning} role="alert">
@@ -188,7 +277,7 @@ export default function PageClient({
 
       <section className={styles.summaryWorkspace} aria-label="Summary feed and inspector">
         <div className={styles.feedPanel}>
-          {filteredItems.length === 0 ? (
+          {sortedFilteredItems.length === 0 ? (
             <div className={styles.emptyState} role="status">
               <span className={styles.emptyIcon} aria-hidden="true">
                 {isFiltered ? "🔎" : "📭"}
@@ -213,7 +302,7 @@ export default function PageClient({
             </div>
           ) : (
             <CompactFeed
-              items={filteredItems}
+              items={sortedFilteredItems}
               selectedId={selectedId}
               onSelect={(item) => setSelectedId(item?.id ?? null)}
               label="Compact message feed"
@@ -233,7 +322,7 @@ export default function PageClient({
         </div>
       </section>
 
-      {/* ── Source freshness indicators ─────────────────────────────────── */}
+      {/* ── Source freshness indicators ──────────────────────────────────── */}
       {(whatsappTimestamp || emailTimestamp) && (
         <footer className={styles.freshnessFooter}>
           {whatsappTimestamp && (
