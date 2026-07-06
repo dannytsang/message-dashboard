@@ -50,8 +50,46 @@
   overscroll-behavior: contain;
   padding-right: 4px;
   position: sticky;
+  scrollbar-color: rgba(148, 163, 184, 0.62) rgba(15, 17, 23, 0.28);
   scrollbar-gutter: stable;
+  scrollbar-width: thin;
   top: var(--whatsapp-pane-top);
+}
+
+.sidePane::-webkit-scrollbar {
+  width: 10px;
+}
+
+.sidePane::-webkit-scrollbar-track {
+  background: rgba(15, 17, 23, 0.28);
+  border-radius: 999px;
+}
+
+.sidePane::-webkit-scrollbar-thumb {
+  background: rgba(148, 163, 184, 0.62);
+  border: 2px solid rgba(15, 17, 23, 0.28);
+  border-radius: 999px;
+}
+
+.sidePane::-webkit-scrollbar-thumb:hover {
+  background: rgba(203, 213, 225, 0.76);
+}
+
+[data-theme="light"] .sidePane {
+  scrollbar-color: rgba(100, 116, 139, 0.42) transparent;
+}
+
+[data-theme="light"] .sidePane::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+[data-theme="light"] .sidePane::-webkit-scrollbar-thumb {
+  background: rgba(100, 116, 139, 0.42);
+  border-color: transparent;
+}
+
+[data-theme="light"] .sidePane::-webkit-scrollbar-thumb:hover {
+  background: rgba(71, 85, 105, 0.58);
 }
 
 .historyPane {
