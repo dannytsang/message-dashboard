@@ -1,15 +1,13 @@
 "use client";
 
 import { signOut } from "next-auth/react";
-import { useEffect, useRef, useState, useTransition } from "react";
+import { useEffect, useRef, useState } from "react";
 import styles from "./UserMenu.module.css";
 
 interface UserMenuProps {
   displayName: string;
   menuId: string;
   signOutEnabled: boolean;
-  /** Current effective mode for this user, read from getShellModeState server-side. */
-  currentMode?: "live" | "demo";
   onClose: () => void;
 }
 
@@ -17,13 +15,10 @@ export default function UserMenu({
   displayName,
   menuId,
   signOutEnabled,
-  currentMode,
   onClose,
 }: UserMenuProps) {
   const menuRef = useRef<HTMLDivElement>(null);
   const [currentTheme, setCurrentTheme] = useState("dark");
-  const [isPending, startTransition] = useTransition();
-  const [displayMode, setDisplayMode] = useState(currentMode ?? "live");
 
   useEffect(() => {
     try {
@@ -79,24 +74,6 @@ export default function UserMenu({
     await signOut({ callbackUrl: "/auth/signin" });
   };
 
-  const effectiveMode = isPending ? displayMode : (currentMode ?? "live");
-
-  const handleDemoModeToggle = () => {
-    const nextMode: "live" | "demo" = effectiveMode === "live" ? "demo" : "live";
-
-    startTransition(async () => {
-      setDisplayMode(nextMode);
-      try {
-        await fetch("/api/dashboard/demo-mode", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ mode: nextMode }),
-        });
-      } catch {
-        setDisplayMode(currentMode ?? "live");
-      }
-    });
-  };
 
   return (
     <div
@@ -181,35 +158,6 @@ export default function UserMenu({
         </svg>
         <span className={styles.rowLabel}>Debug</span>
       </button>
-
-      {currentMode != null && (
-        <button
-          role="menuitem"
-          className={`${styles.row} session-menu-item`}
-          onClick={handleDemoModeToggle}
-          aria-label={`Demo mode is ${effectiveMode}. Click to switch.`}
-          title="Switch between real data and fictional demo data"
-        >
-          <svg
-            className={styles.rowIcon}
-            viewBox="0 0 24 24"
-            fill="none"
-            stroke="currentColor"
-            strokeWidth="2"
-            strokeLinecap="round"
-            strokeLinejoin="round"
-            aria-hidden="true"
-          >
-            <rect x="2" y="3" width="20" height="14" rx="2" ry="2" />
-            <line x1="8" y1="21" x2="16" y2="21" />
-            <line x1="12" y1="17" x2="12" y2="21" />
-          </svg>
-          <span className={styles.rowLabel}>
-            {effectiveMode === "live" ? "Demo mode" : "Live mode"}
-          </span>
-          <span className={styles.modeIndicator}>{effectiveMode === "live" ? "Off" : "On"}</span>
-        </button>
-      )}
 
       <div className={styles.divider} role="presentation" />
 

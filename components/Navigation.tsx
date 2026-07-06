@@ -1,7 +1,5 @@
 /**
- * Shared navigation shell. The user menu (rendered via SessionSurface →
- * UserMenu) carries the authenticated-only demo-mode toggle. Sign out remains
- * the last item in that menu.
+ * Shared navigation shell. Sign out remains the last item in the user menu.
  */
 import NavigationClient from "@/components/NavigationClient";
 import { getSessionDisplayName } from "@/lib/auth";
@@ -11,17 +9,12 @@ import type { DashboardSiteMode } from "@/lib/site-mode";
 import styles from "./Navigation.module.css";
 
 interface NavigationProps {
-  /**
-   * Per-request effective mode override.
-   * When provided, the shell uses this instead of the raw top-level site mode —
-   * ensuring the demo banner reflects source-level fallbacks (spec 010 FR-004).
-   */
   effectiveModeOverride?: DashboardSiteMode;
 }
 
 export default async function Navigation({ effectiveModeOverride }: NavigationProps) {
   const session = await getOptionalServerSession();
-  const shellMode = getShellModeState(effectiveModeOverride);
+  const shellMode = getShellModeState();
 
   return (
     <>
@@ -36,7 +29,6 @@ export default async function Navigation({ effectiveModeOverride }: NavigationPr
       <NavigationClient
         displayName={getSessionDisplayName(session?.user)}
         isAuthenticated={Boolean(session)}
-        currentMode={shellMode.mode}
       />
     </>
   );

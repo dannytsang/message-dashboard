@@ -14,14 +14,11 @@ const navItems = [
 interface NavigationClientProps {
   displayName: string;
   isAuthenticated: boolean;
-  /** Current effective mode for this user, injected by the server component. */
-  currentMode: "live" | "demo";
 }
 
 export default function NavigationClient({
   displayName,
   isAuthenticated,
-  currentMode,
 }: NavigationClientProps) {
   const pathname = usePathname();
 
@@ -56,7 +53,6 @@ export default function NavigationClient({
             <SessionSurface
               displayName={displayName}
               signOutEnabled={isAuthenticated}
-              currentMode={currentMode}
             />
           </div>
         </div>

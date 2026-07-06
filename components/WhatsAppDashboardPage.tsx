@@ -18,7 +18,7 @@ import styles from "@/app/whatsapp/whatsapp.module.css";
 
 interface WhatsAppDashboardPageProps {
   snapshot: WhatsAppDashboardSnapshot;
-  dataMode: "live" | "demo";
+  dataMode: "live";
 }
 
 interface ConversationBucket {
@@ -288,9 +288,7 @@ export default function WhatsAppDashboardPage({
     ? snapshot.followUps.filter((item) => item.conversationId === selectedConversation.id)
     : [];
 
-  const subtitle = `${snapshot.monitored.length + snapshot.drafts.length} tracked conversation views · ${snapshot.followUps.length} active follow-ups · ${
-    dataMode === "live" ? "server snapshot" : "fictional demo data"
-  }`;
+  const subtitle = `${snapshot.monitored.length + snapshot.drafts.length} tracked conversation views · ${snapshot.followUps.length} active follow-ups · server snapshot`;
 
   return (
     <main className={styles.page}>
@@ -322,7 +320,7 @@ export default function WhatsAppDashboardPage({
               emptyTitle={snapshot.monitored.length === 0 ? "No monitored conversations" : "No matching monitored conversations"}
               emptyBody={
                 snapshot.monitored.length === 0
-                  ? "Fictional monitored WhatsApp conversations will appear here once the server-side dashboard feed is connected."
+                  ? "Monitored WhatsApp conversations will appear here once the server-side dashboard feed is connected."
                   : "Try clearing or broadening the display-name search for monitored chats."
               }
             />

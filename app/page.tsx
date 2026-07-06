@@ -1,7 +1,6 @@
 import PageClient from "@/app/page-client";
 import Navigation from "@/components/Navigation";
 import {
-  getEffectiveRenderMode,
   readEmailSourceSnapshot,
   readWhatsAppSourceSnapshot,
 } from "@/lib/dashboard-data";
@@ -28,11 +27,6 @@ export default async function HomePage() {
     readWhatsAppSourceSnapshot(topLevelMode),
   ]);
 
-  // Spec 010 FR-004: if ANY source fell back to demo, the whole site renders as demo
-  const effectiveMode = getEffectiveRenderMode(
-    emailResult.mode,
-    whatsappResult.mode,
-  );
 
   // Derive merged communication items from available snapshots
   const mergedItems: CommunicationItem[] = [];
@@ -133,7 +127,7 @@ export default async function HomePage() {
 
   return (
     <>
-      <Navigation effectiveModeOverride={effectiveMode} />
+      <Navigation />
       <PageClient
       allItems={mergedItems}
       whatsappCount={whatsappCount}

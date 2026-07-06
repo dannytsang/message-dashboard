@@ -8,7 +8,7 @@ type SortMode = "latest-received" | "subject-a-z";
 
 interface EmailsInboxPageProps {
   items: EmailInboxDisplayItem[];
-  dataMode: "live" | "demo";
+  dataMode: "live";
 }
 
 function searchHaystack(item: EmailInboxDisplayItem): string {
@@ -88,9 +88,7 @@ export default function EmailsInboxPage({
   const subtitle =
     items.length === 0
       ? "No inbox data"
-      : `${items.length} inbox item${items.length === 1 ? "" : "s"} · ${
-          dataMode === "live" ? "server snapshot" : "fictional demo data"
-        }`;
+      : `${items.length} inbox item${items.length === 1 ? "" : "s"} · server snapshot`;
 
   return (
     <main className={styles.page}>

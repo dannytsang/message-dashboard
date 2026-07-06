@@ -275,7 +275,7 @@ export interface WhatsAppDashboardSnapshot {
 }
 
 export interface WhatsAppDashboardReadResult {
-  mode: "live" | "demo";
+  mode: "live";
   snapshot: WhatsAppDashboardSnapshot;
   warning?: string;
 }

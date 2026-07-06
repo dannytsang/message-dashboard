@@ -1,6 +1,5 @@
 import "server-only";
 
-import { dashboardDemoSnapshot, emailDemoSourceSnapshot, whatsappDemoSourceSnapshot } from "@/lib/demo";
 import { VercelBlobStorageClient } from "@/lib/blob-storage";
 import { getSiteMode, type DashboardSiteMode } from "@/lib/site-mode";
 import type {
@@ -35,6 +34,41 @@ const WHATSAPP_DASHBOARD_URL_ENV = "COMMUNICATION_WHATSAPP_DASHBOARD_URL";
 // Deterministic blob paths for separated source storage (spec 007/008)
 const EMAIL_SOURCE_BLOB_PATH = "dashboard/v1/email/latest.json";
 const WHATSAPP_SOURCE_BLOB_PATH = "dashboard/v1/whatsapp/latest.json";
+
+const emptyDashboardSnapshot = (): DashboardSnapshotV1 => ({
+  schemaVersion: "dashboard-snapshot/v1",
+  generatedAt: new Date().toISOString(),
+  items: [],
+  summary: {
+    openCount: 0,
+    reviewCount: 0,
+    draftCount: 0,
+    sourceCounts: { email: 0, whatsapp: 0 },
+  },
+});
+
+const emptyWhatsAppDashboardSnapshot = (): WhatsAppDashboardSnapshot => ({
+  schemaVersion: "whatsapp-dashboard-source/v1",
+  source: "whatsapp",
+  sourcePath: WHATSAPP_SOURCE_BLOB_PATH,
+  generatedAt: new Date().toISOString(),
+  dataGeneratedAt: new Date().toISOString(),
+  monitored: [],
+  drafts: [],
+  followUps: [],
+  summary: {
+    monitoredCount: 0,
+    draftCount: 0,
+    followUpCount: 0,
+    groupCount: 0,
+    directCount: 0,
+    dueSoonCount: 0,
+    dueNowCount: 0,
+    overdueCount: 0,
+    needsReviewCount: 0,
+    openCount: 0,
+  },
+});
 
 export type DashboardDataMode = DashboardSiteMode;
 
@@ -176,7 +210,7 @@ function isEmailDashboardSourceSnapshotV1(
 
 /**
  * Legacy email source snapshot validator (email-source/v1 with generatedAt).
- * Used only for backward compatibility with existing blob fixtures.
+ * Used only for backward compatibility with existing legacy blobs.
  */
 function isLegacyEmailSourceSnapshot(value: unknown): boolean {
   return (
@@ -528,13 +562,6 @@ function buildSummary(snapshot: DashboardSnapshotV1): DashboardSnapshotV1["summa
 export async function readDashboardSnapshot(
   siteMode: DashboardSiteMode = getSiteMode().mode,
 ): Promise<DashboardReadResult> {
-  if (siteMode === "demo") {
-    return {
-      mode: "demo",
-      snapshot: dashboardDemoSnapshot,
-    };
-  }
-
   const snapshotUrl = process.env[DASHBOARD_SNAPSHOT_URL_ENV];
 
   if (snapshotUrl) {
@@ -553,36 +580,33 @@ export async function readDashboardSnapshot(
       };
     } catch (error) {
       return {
-        mode: "demo",
-        snapshot: dashboardDemoSnapshot,
+        mode: "live",
+        snapshot: emptyDashboardSnapshot(),
         warning:
           error instanceof Error
-            ? `Falling back to fictional dashboard fixtures because the server snapshot could not be read: ${error.message}`
-            : "Falling back to fictional dashboard fixtures because the server snapshot could not be read.",
+            ? `Dashboard snapshot unavailable: ${error.message}`
+            : "Dashboard snapshot unavailable.",
       };
     }
   }
 
   return {
-    mode: "demo",
-    snapshot: dashboardDemoSnapshot,
+    mode: "live",
+    snapshot: emptyDashboardSnapshot(),
+    warning: "Dashboard snapshot unavailable.",
   };
 }
 
 export async function readEmailSourceSnapshot(
   siteMode: DashboardSiteMode = getSiteMode().mode,
 ): Promise<EmailSourceReadResult> {
-  if (siteMode === "demo") {
-    return { mode: "demo", snapshot: emailDemoSourceSnapshot };
-  }
-
   const text = await readBlobText(EMAIL_SOURCE_BLOB_PATH);
   // Treat null (not found), empty, or whitespace-only as unavailable
   if (text === null || text.trim() === "") {
     return {
-      mode: "demo",
-      snapshot: emailDemoSourceSnapshot,
-      warning: "Email snapshot unavailable; falling back to fictional inbox fixtures.",
+      mode: "live",
+      snapshot: null,
+      warning: "Email snapshot unavailable.",
     };
   }
   try {
@@ -599,8 +623,7 @@ export async function readEmailSourceSnapshot(
     throw new Error("Email source snapshot did not match expected schema");
   } catch (error) {
     // When the user explicitly chose live and Blob is available, a per-source
-    // validation failure must NOT silently downgrade the whole page to demo.
-    // Surface a warning and return null snapshot instead; the page stays live.
+    // validation failure must surface a warning and return null snapshot instead; the page stays live.
     return {
       mode: "live",
       snapshot: null,
@@ -614,22 +637,17 @@ export async function readEmailSourceSnapshot(
 
 /**
  * Read WhatsApp source snapshot from its deterministic Blob path (specs 007/008).
- * Falls back to null + warning when missing/malformed; callers must handle fixture
- * substitution if they choose to fall back further (e.g. whatsappDashboardFixtureSnapshot).
+ * Falls back to null + warning when missing/malformed.
  */
 export async function readWhatsAppSourceSnapshot(
   siteMode: DashboardSiteMode = getSiteMode().mode,
 ): Promise<WhatsAppSourceReadResult> {
-  if (siteMode === "demo") {
-    return { mode: "demo", snapshot: whatsappDemoSourceSnapshot };
-  }
-
   const text = await readBlobText(WHATSAPP_SOURCE_BLOB_PATH);
   if (text === null || text.trim() === "") {
     return {
-      mode: "demo",
-      snapshot: whatsappDemoSourceSnapshot,
-      warning: "WhatsApp snapshot unavailable; no fixture fallback for source reader.",
+      mode: "live",
+      snapshot: null,
+      warning: "WhatsApp snapshot unavailable.",
     };
   }
   try {
@@ -640,8 +658,7 @@ export async function readWhatsAppSourceSnapshot(
     return { mode: "live", snapshot: payload };
   } catch (error) {
     // When the user explicitly chose live and Blob is available, a per-source
-    // validation failure must NOT silently downgrade the whole page to demo.
-    // Surface a warning and return null snapshot instead; the page stays live.
+    // validation failure must surface a warning and return null snapshot instead; the page stays live.
     return {
       mode: "live",
       snapshot: null,
@@ -656,13 +673,6 @@ export async function readWhatsAppSourceSnapshot(
 export async function readEmailInboxItems(
   siteMode: DashboardSiteMode = getSiteMode().mode,
 ): Promise<EmailInboxReadResult> {
-  if (siteMode === "demo") {
-    return {
-      mode: "demo",
-      items: emailDemoSourceSnapshot.items.map(formatEmailDashboardRowDisplay),
-    };
-  }
-
   // Priority 1: deterministic blob path (spec 007/008)
   const text = await readBlobText(EMAIL_SOURCE_BLOB_PATH);
   // Treat null (not found), empty, or whitespace-only as unavailable
@@ -686,7 +696,14 @@ export async function readEmailInboxItems(
         items: payload.items.map(formatEmailInboxDisplay),
       };
     } catch (error) {
-      // Malformed blob — fall through to fixtures
+      return {
+        mode: "live",
+        items: [],
+        warning:
+          error instanceof Error
+            ? `Email snapshot malformed: ${error.message}`
+            : "Email snapshot malformed.",
+      };
     }
   }
 
@@ -704,19 +721,20 @@ export async function readEmailInboxItems(
       };
     } catch (error) {
       return {
-        mode: "demo",
-        items: emailDemoSourceSnapshot.items.map(formatEmailDashboardRowDisplay),
+        mode: "live",
+        items: [],
         warning:
           error instanceof Error
-            ? `Falling back to fictional inbox fixtures because the server inbox snapshot could not be read: ${error.message}`
-            : "Falling back to fictional inbox fixtures because the server inbox snapshot could not be read.",
+            ? `Email inbox snapshot unavailable: ${error.message}`
+            : "Email inbox snapshot unavailable.",
       };
     }
   }
 
   return {
-    mode: "demo",
-    items: emailDemoSourceSnapshot.items.map(formatEmailDashboardRowDisplay),
+    mode: "live",
+    items: [],
+    warning: "Email inbox snapshot unavailable.",
   };
 }
 
@@ -747,36 +765,25 @@ export async function readWhatsAppDashboardData(
       };
     } catch (error) {
       return {
-        mode: "demo",
-        snapshot: whatsAppSourceSnapshotToUi(whatsappDemoSourceSnapshot),
+        mode: "live",
+        snapshot: emptyWhatsAppDashboardSnapshot(),
         warning:
           error instanceof Error
-            ? `Falling back to fictional WhatsApp fixtures because the server snapshot could not be read: ${error.message}`
-            : "Falling back to fictional WhatsApp fixtures because the server snapshot could not be read.",
+            ? `WhatsApp dashboard snapshot unavailable: ${error.message}`
+            : "WhatsApp dashboard snapshot unavailable.",
       };
     }
   }
 
   return {
-    mode: "demo",
-    snapshot: whatsAppSourceSnapshotToUi(whatsappDemoSourceSnapshot),
-    warning: sourceResult.warning,
+    mode: "live",
+    snapshot: emptyWhatsAppDashboardSnapshot(),
+    warning: sourceResult.warning ?? "WhatsApp snapshot unavailable.",
   };
 }
 
-/**
- * Returns the effective render mode for a page.
- *
- * Per spec 010 FR-004: if ANY source reader falls back to demo for the current
- * render context, the whole page (and site) renders as demo.
- *
- * Call this after reading all sources for a page and pass the result to
- * the shared shell via getShellModeState(effectiveMode).
- */
-export function getEffectiveRenderMode(
-  ...readModes: Array<"live" | "demo">
-): "live" | "demo" {
-  return readModes.some((m) => m === "demo") ? "demo" : "live";
+export function getEffectiveRenderMode(): "live" {
+  return "live";
 }
 
 
