@@ -29,6 +29,7 @@ interface ConversationBucket {
 }
 
 type ConversationKindFilter = "all" | "group" | "direct";
+type ConversationOperationalFilter = "all" | "action_required" | "needs_review";
 type FollowUpOperationalFilter = "all" | "action_required" | "needs_review";
 
 const conversationSortLabels: Record<WhatsAppConversationSortMode, string> = {
@@ -46,6 +47,12 @@ const conversationKindFilterLabels: Record<ConversationKindFilter, string> = {
   all: "All chats",
   group: "Groups",
   direct: "Direct",
+};
+
+const conversationOperationalFilterLabels: Record<ConversationOperationalFilter, string> = {
+  all: "All messages",
+  action_required: "Actions",
+  needs_review: "Reviews",
 };
 
 const followUpOperationalFilterLabels: Record<FollowUpOperationalFilter, string> = {
@@ -90,6 +97,35 @@ function matchesConversationKind(
   kindFilter: ConversationKindFilter,
 ) {
   return kindFilter === "all" || item.kind === kindFilter;
+}
+
+function hasActionRequiredConversationState(item: WhatsAppConversationItem) {
+  return (
+    item.state === "draft_awaiting_approval" ||
+    item.state === "review_needed" ||
+    item.state === "uncertain_needs_review" ||
+    Boolean(item.pendingDraftSnippet)
+  );
+}
+
+function hasReviewConversationState(item: WhatsAppConversationItem) {
+  return item.state === "review_needed" || item.state === "uncertain_needs_review";
+}
+
+function matchesConversationOperationalFilter(
+  item: WhatsAppConversationItem,
+  filter: ConversationOperationalFilter,
+  actionConversationIds: Set<string>,
+  reviewConversationIds: Set<string>,
+) {
+  switch (filter) {
+    case "action_required":
+      return hasActionRequiredConversationState(item) || actionConversationIds.has(item.id);
+    case "needs_review":
+      return hasReviewConversationState(item) || reviewConversationIds.has(item.id);
+    default:
+      return true;
+  }
 }
 
 function matchesFollowUpOperationalFilter(
@@ -293,6 +329,10 @@ export default function WhatsAppDashboardPage({
   const [monitoredKindFilter, setMonitoredKindFilter] =
     useState<ConversationKindFilter>("all");
   const [draftsKindFilter, setDraftsKindFilter] = useState<ConversationKindFilter>("all");
+  const [monitoredStatusFilter, setMonitoredStatusFilter] =
+    useState<ConversationOperationalFilter>("action_required");
+  const [draftsStatusFilter, setDraftsStatusFilter] =
+    useState<ConversationOperationalFilter>("action_required");
   const [followUpSort, setFollowUpSort] =
     useState<WhatsAppFollowUpSortMode>("latest-message");
   const [followUpFilter, setFollowUpFilter] =
@@ -316,17 +356,51 @@ export default function WhatsAppDashboardPage({
     ? conversationLookup.get(selection.conversationId) ?? null
     : null;
 
+  const actionConversationIds = useMemo(() => {
+    const ids = new Set<string>();
+    for (const item of snapshot.followUps) {
+      if (matchesFollowUpOperationalFilter(item, "action_required")) {
+        ids.add(item.conversationId);
+      }
+    }
+    return ids;
+  }, [snapshot.followUps]);
+
+  const reviewConversationIds = useMemo(() => {
+    const ids = new Set<string>();
+    for (const item of snapshot.followUps) {
+      if (matchesFollowUpOperationalFilter(item, "needs_review")) {
+        ids.add(item.conversationId);
+      }
+    }
+    return ids;
+  }, [snapshot.followUps]);
+
   const monitoredItems = useMemo(() => {
     const query = normalizeQuery(monitoredQuery);
     return sortConversations(
       snapshot.monitored.filter(
         (item) =>
           matchesDisplayName(item.displayName, query) &&
-          matchesConversationKind(item, monitoredKindFilter),
+          matchesConversationKind(item, monitoredKindFilter) &&
+          matchesConversationOperationalFilter(
+            item,
+            monitoredStatusFilter,
+            actionConversationIds,
+            reviewConversationIds,
+          ),
       ),
       monitoredSort,
     );
-  }, [monitoredKindFilter, monitoredQuery, monitoredSort, snapshot.monitored]);
+  }, [
+    actionConversationIds,
+    monitoredKindFilter,
+    monitoredQuery,
+    monitoredSort,
+    monitoredStatusFilter,
+    reviewConversationIds,
+    snapshot.monitored,
+  ]);
 
   const draftItems = useMemo(() => {
     const query = normalizeQuery(draftsQuery);
@@ -334,11 +408,25 @@ export default function WhatsAppDashboardPage({
       snapshot.drafts.filter(
         (item) =>
           matchesDisplayName(item.displayName, query) &&
-          matchesConversationKind(item, draftsKindFilter),
+          matchesConversationKind(item, draftsKindFilter) &&
+          matchesConversationOperationalFilter(
+            item,
+            draftsStatusFilter,
+            actionConversationIds,
+            reviewConversationIds,
+          ),
       ),
       draftsSort,
     );
-  }, [draftsKindFilter, draftsQuery, draftsSort, snapshot.drafts]);
+  }, [
+    actionConversationIds,
+    draftsKindFilter,
+    draftsQuery,
+    draftsSort,
+    draftsStatusFilter,
+    reviewConversationIds,
+    snapshot.drafts,
+  ]);
 
   const monitoredBuckets = useMemo(
     () => bucketConversationItems(monitoredItems, snapshot.generatedAt),
@@ -402,6 +490,8 @@ export default function WhatsAppDashboardPage({
               onSortChange={setMonitoredSort}
               kindFilter={monitoredKindFilter}
               onKindFilterChange={setMonitoredKindFilter}
+              statusFilter={monitoredStatusFilter}
+              onStatusFilterChange={setMonitoredStatusFilter}
               buckets={monitoredBuckets}
               origin="monitored"
               selectedConversationId={selection?.conversationId ?? null}
@@ -425,6 +515,8 @@ export default function WhatsAppDashboardPage({
               onSortChange={setDraftsSort}
               kindFilter={draftsKindFilter}
               onKindFilterChange={setDraftsKindFilter}
+              statusFilter={draftsStatusFilter}
+              onStatusFilterChange={setDraftsStatusFilter}
               buckets={draftBuckets}
               origin="drafts"
               selectedConversationId={selection?.conversationId ?? null}
@@ -472,6 +564,8 @@ interface ConversationSectionProps {
   onSortChange: (value: WhatsAppConversationSortMode) => void;
   kindFilter: ConversationKindFilter;
   onKindFilterChange: (value: ConversationKindFilter) => void;
+  statusFilter: ConversationOperationalFilter;
+  onStatusFilterChange: (value: ConversationOperationalFilter) => void;
   buckets: ConversationBucket[];
   origin: WhatsAppConversationListKey;
   selectedConversationId: string | null;
@@ -491,6 +585,8 @@ function ConversationSection({
   onSortChange,
   kindFilter,
   onKindFilterChange,
+  statusFilter,
+  onStatusFilterChange,
   buckets,
   origin,
   selectedConversationId,
@@ -534,6 +630,24 @@ function ConversationSection({
                   onChange={(event) => onKindFilterChange(event.target.value as ConversationKindFilter)}
                 >
                   {Object.entries(conversationKindFilterLabels).map(([value, label]) => (
+                    <option key={value} value={value}>
+                      {label}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div className={styles.sortWrap}>
+                <label className={styles.sortLabel} htmlFor={`${origin}-status`}>
+                  Status
+                </label>
+                <select
+                  id={`${origin}-status`}
+                  className={styles.sortSelect}
+                  value={statusFilter}
+                  onChange={(event) => onStatusFilterChange(event.target.value as ConversationOperationalFilter)}
+                >
+                  {Object.entries(conversationOperationalFilterLabels).map(([value, label]) => (
                     <option key={value} value={value}>
                       {label}
                     </option>
