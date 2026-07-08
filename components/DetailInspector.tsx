@@ -56,6 +56,26 @@ function NeutralPanel() {
   );
 }
 
+/** Arrow icon used in the review message card. */
+function ArrowInboundIcon() {
+  return (
+    <svg
+      width="14"
+      height="14"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+    >
+      <polyline points="9 17 4 12 9 7" />
+      <path d="M20 18v-2a4 4 0 0 0-4-4H4" />
+    </svg>
+  );
+}
+
 function SelectedPanel({ item }: { item: CommunicationItem }) {
   const freshnessLabel = item.updatedAt ? formatTimestamp(item.updatedAt) : null;
 
@@ -103,6 +123,15 @@ function SelectedPanel({ item }: { item: CommunicationItem }) {
             <dd className={styles.inspectorDd}>{freshnessLabel}</dd>
           </div>
         )}
+
+        {item.reviewMessageExcerpt && (
+          <div className={styles.inspectorField}>
+            <dt className={styles.inspectorDt}>Message requiring review</dt>
+            <dd className={styles.inspectorDd}>
+              <ReviewMessageCard excerpt={item.reviewMessageExcerpt} />
+            </dd>
+          </div>
+        )}
       </dl>
 
       <div className={styles.inspectorNav}>
@@ -117,6 +146,20 @@ function SelectedPanel({ item }: { item: CommunicationItem }) {
           </a>
         )}
       </div>
+    </div>
+  );
+}
+
+/** Renders a single inbound message excerpt inside the detail inspector. */
+function ReviewMessageCard({ excerpt }: { excerpt: NonNullable<CommunicationItem["reviewMessageExcerpt"]> }) {
+  return (
+    <div className={styles.reviewMessageCard}>
+      <div className={styles.reviewMessageMeta}>
+        <ArrowInboundIcon />
+        <span className={styles.reviewMessageAuthor}>{excerpt.author}</span>
+        <span className={styles.reviewMessageTime}>{excerpt.sentLabel}</span>
+      </div>
+      <p className={styles.reviewMessageBody}>{excerpt.body}</p>
     </div>
   );
 }

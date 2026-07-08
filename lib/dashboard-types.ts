@@ -10,6 +10,35 @@ export type CommunicationStatus =
   | "dismissed"
   | "suppressed";
 
+/**
+ * A dashboard-safe excerpt of a single source message that is sufficient for
+ * Danny to make an informed review decision in the Summary inspector.
+ *
+ * Properties intentionally match the sanitised WhatsApp timeline entry shape
+ * already published by the monitor pipeline. No raw JIDs, phone numbers, or
+ * message IDs are exposed.
+ */
+export interface ReviewMessageExcerpt {
+  /** Short display label for the message author, e.g. "Terina". No JID/phone. */
+  author: string;
+  /**
+   * Dashboard-safe message summary produced by the monitor pipeline.
+   * May be a verbatim safe-text excerpt or a generated summary — both are
+   * already sanitised before publishing. Max ~280 chars is recommended.
+   */
+  body: string;
+  /**
+   * Human-readable sent time, e.g. "Today, 14:30" or "Yesterday, 09:15".
+   * Already derived by the monitor pipeline; never a raw timestamp string.
+   */
+  sentLabel: string;
+  /**
+   * Direction from Danny's perspective: inbound = received from the contact,
+   * outbound = sent by Danny.
+   */
+  direction: "inbound" | "outbound";
+}
+
 export interface CommunicationItem {
   id: string;
   source: CommunicationSource;
@@ -24,6 +53,16 @@ export interface CommunicationItem {
   receivedAt?: string;
   displayName?: string;
   metadata?: Record<string, string | number | boolean | null>;
+  /**
+   * For WhatsApp items in `uncertain_needs_review` status, a single dashboard-safe
+   * message excerpt (inbound from the contact) that provides sufficient context for
+   * Danny to make an informed review decision — e.g. the last incoming message
+   * from the contact that triggered the review flag.
+   *
+   * Absent for all other item types and statuses. No raw JIDs, phone numbers,
+   * message IDs, or private paths are included.
+   */
+  reviewMessageExcerpt?: ReviewMessageExcerpt;
 }
 
 export interface DashboardSnapshotV1 {

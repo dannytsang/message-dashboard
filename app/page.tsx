@@ -1,5 +1,6 @@
 import PageClient from "@/app/page-client";
 import Navigation from "@/components/Navigation";
+import { formatDashboardDateTime } from "@/lib/dashboard-format";
 import {
   readEmailSourceSnapshot,
   readWhatsAppSourceSnapshot,
@@ -7,7 +8,9 @@ import {
 import { getSiteMode } from "@/lib/site-mode";
 import type {
   CommunicationItem,
+  ReviewMessageExcerpt,
   WhatsAppConversationItem,
+  WhatsAppConversationRowV1,
   WhatsAppFollowUpItem,
 } from "@/lib/dashboard-types";
 
@@ -76,27 +79,63 @@ export default async function HomePage() {
       ...(snap.monitored ?? []),
       ...(snap.drafts ?? []),
       ...(snap.followUps ?? []),
-    ].map((item) => ({
-      id: `whatsapp:${item.id}`,
-      source: "whatsapp" as const,
-      status: getWhatsAppStatus(item),
-      title:
-        "displayName" in item
-          ? (item as { displayName: string }).displayName
-          : "title" in item
-            ? (item as { title: string }).title
-            : "Unknown",
-      context:
-        "lastMessageSummary" in item
-          ? (item as { lastMessageSummary: string }).lastMessageSummary
-          : "contextSummary" in item
-            ? (item as { contextSummary: string }).contextSummary
-            : "",
-      receivedAt:
-        "lastMessageAt" in item
-          ? (item as { lastMessageAt?: string }).lastMessageAt
-          : undefined,
-    }));
+    ].map((item) => {
+      const base = {
+        id: `whatsapp:${item.id}`,
+        source: "whatsapp" as const,
+        status: getWhatsAppStatus(item),
+        title:
+          "displayName" in item
+            ? (item as { displayName: string }).displayName
+            : "title" in item
+              ? (item as { title: string }).title
+              : "Unknown",
+        context:
+          "lastMessageSummary" in item
+            ? (item as { lastMessageSummary: string }).lastMessageSummary
+            : "contextSummary" in item
+              ? (item as { contextSummary: string }).contextSummary
+              : "",
+        receivedAt:
+          "lastMessageAt" in item
+            ? (item as { lastMessageAt?: string }).lastMessageAt
+            : undefined,
+      };
+
+      // For WhatsApp items in uncertain_needs_review status, attach a single
+      // inbound message excerpt from the contact's timeline so Danny has enough
+      // context to make an informed review decision in the Summary inspector.
+      // Only conversation items (monitored/drafts) carry a timeline.
+      const needsReview = base.status === "uncertain_needs_review";
+      if (needsReview && "timeline" in item && Array.isArray(item.timeline)) {
+        const rows = item.timeline as Array<{
+          speakerLabel?: string;
+          summary: string;
+          createdAt?: string;
+          direction: string;
+        }>;
+        const lastInbound = rows
+          .slice()
+          .reverse()
+          .find((e) => e.direction === "incoming" || e.direction === "inbound");
+
+        if (lastInbound) {
+          const sentLabel =
+            lastInbound.createdAt != null
+              ? formatDashboardDateTime(lastInbound.createdAt) ?? "Unknown time"
+              : "Unknown time";
+          const excerpt: ReviewMessageExcerpt = {
+            author: lastInbound.speakerLabel ?? "Contact",
+            body: lastInbound.summary,
+            sentLabel,
+            direction: "inbound",
+          };
+          return { ...base, reviewMessageExcerpt: excerpt };
+        }
+      }
+
+      return base;
+    });
 
     mergedItems.push(...waItems);
   }
