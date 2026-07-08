@@ -29,6 +29,7 @@ interface ConversationBucket {
 }
 
 type ConversationKindFilter = "all" | "group" | "direct";
+type FollowUpOperationalFilter = "all" | "action_required" | "needs_review";
 
 const conversationSortLabels: Record<WhatsAppConversationSortMode, string> = {
   "latest-message": "Latest message",
@@ -44,6 +45,12 @@ const conversationKindFilterLabels: Record<ConversationKindFilter, string> = {
   all: "All chats",
   group: "Groups",
   direct: "Direct",
+};
+
+const followUpOperationalFilterLabels: Record<FollowUpOperationalFilter, string> = {
+  all: "All follow-ups",
+  action_required: "Actions",
+  needs_review: "Reviews",
 };
 
 const followUpStateLabels: Record<WhatsAppFollowUpState, string> = {
@@ -82,6 +89,20 @@ function matchesConversationKind(
   kindFilter: ConversationKindFilter,
 ) {
   return kindFilter === "all" || item.kind === kindFilter;
+}
+
+function matchesFollowUpOperationalFilter(
+  item: WhatsAppFollowUpItem,
+  filter: FollowUpOperationalFilter,
+) {
+  switch (filter) {
+    case "action_required":
+      return item.state !== "needs_review" && item.state !== "resolved" && item.state !== "suppressed";
+    case "needs_review":
+      return item.state === "needs_review";
+    default:
+      return true;
+  }
 }
 
 function compareConversationByLatest(
@@ -249,6 +270,8 @@ export default function WhatsAppDashboardPage({
   const [draftsKindFilter, setDraftsKindFilter] = useState<ConversationKindFilter>("all");
   const [followUpSort, setFollowUpSort] =
     useState<WhatsAppFollowUpSortMode>("due-soonest");
+  const [followUpFilter, setFollowUpFilter] =
+    useState<FollowUpOperationalFilter>("all");
   const [selection, setSelection] = useState<{
     conversationId: string;
     origin: WhatsAppConversationListKey;
@@ -305,10 +328,14 @@ export default function WhatsAppDashboardPage({
   const followUpItems = useMemo(() => {
     const query = normalizeQuery(followUpQuery);
     return sortFollowUps(
-      snapshot.followUps.filter((item) => matchesDisplayName(item.displayName, query)),
+      snapshot.followUps.filter(
+        (item) =>
+          matchesDisplayName(item.displayName, query) &&
+          matchesFollowUpOperationalFilter(item, followUpFilter),
+      ),
       followUpSort,
     );
-  }, [followUpQuery, followUpSort, snapshot.followUps]);
+  }, [followUpFilter, followUpQuery, followUpSort, snapshot.followUps]);
 
   useEffect(() => {
     if (!selection) return;
@@ -399,6 +426,8 @@ export default function WhatsAppDashboardPage({
           totalItems={snapshot.followUps.length}
           query={followUpQuery}
           onQueryChange={setFollowUpQuery}
+          operationalFilter={followUpFilter}
+          onOperationalFilterChange={setFollowUpFilter}
           sort={followUpSort}
           onSortChange={setFollowUpSort}
         />
@@ -788,6 +817,8 @@ function FollowUpSection({
   totalItems,
   query,
   onQueryChange,
+  operationalFilter,
+  onOperationalFilterChange,
   sort,
   onSortChange,
 }: {
@@ -795,6 +826,8 @@ function FollowUpSection({
   totalItems: number;
   query: string;
   onQueryChange: (value: string) => void;
+  operationalFilter: FollowUpOperationalFilter;
+  onOperationalFilterChange: (value: FollowUpOperationalFilter) => void;
   sort: WhatsAppFollowUpSortMode;
   onSortChange: (value: WhatsAppFollowUpSortMode) => void;
 }) {
@@ -823,24 +856,46 @@ function FollowUpSection({
         />
 
         <div className={styles.controlsRow}>
-          <div className={styles.sortWrap}>
-            <label className={styles.sortLabel} htmlFor="follow-up-sort">
-              Sort
-            </label>
-            <select
-              id="follow-up-sort"
-              className={styles.sortSelect}
-              value={sort}
-              onChange={(event) => onSortChange(event.target.value as WhatsAppFollowUpSortMode)}
-            >
-              {Object.entries(followUpSortLabels).map(([value, label]) => (
-                <option key={value} value={value}>
-                  {label}
-                </option>
-              ))}
-            </select>
+          <div className={styles.filterControls}>
+            <div className={styles.sortWrap}>
+              <label className={styles.sortLabel} htmlFor="follow-up-filter">
+                Filter
+              </label>
+              <select
+                id="follow-up-filter"
+                className={styles.sortSelect}
+                value={operationalFilter}
+                onChange={(event) =>
+                  onOperationalFilterChange(event.target.value as FollowUpOperationalFilter)
+                }
+              >
+                {Object.entries(followUpOperationalFilterLabels).map(([value, label]) => (
+                  <option key={value} value={value}>
+                    {label}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            <div className={styles.sortWrap}>
+              <label className={styles.sortLabel} htmlFor="follow-up-sort">
+                Sort
+              </label>
+              <select
+                id="follow-up-sort"
+                className={styles.sortSelect}
+                value={sort}
+                onChange={(event) => onSortChange(event.target.value as WhatsAppFollowUpSortMode)}
+              >
+                {Object.entries(followUpSortLabels).map(([value, label]) => (
+                  <option key={value} value={value}>
+                    {label}
+                  </option>
+                ))}
+              </select>
+            </div>
           </div>
-          <span className={styles.metaLabel}>Read-only follow-up list</span>
+          <span className={styles.metaLabel}>Read-only follow-up list · {items.length} visible</span>
         </div>
       </div>
 
