@@ -90,6 +90,13 @@ function isEmailIdentifiedAction(action: unknown): boolean {
   );
 }
 
+function isEmailDetailContent(value: unknown): boolean {
+  if (value === undefined) return true;
+  if (typeof value !== "object" || value === null) return false;
+  const detail = value as Record<string, unknown>;
+  return typeof detail.contentExcerpt === "string";
+}
+
 function isEmailDashboardRow(value: unknown): value is EmailDashboardRowV1 {
   if (typeof value !== "object" || value === null) return false;
   const row = value as Record<string, unknown>;
@@ -99,6 +106,7 @@ function isEmailDashboardRow(value: unknown): value is EmailDashboardRowV1 {
     typeof row.receivedAt === "string" &&
     row.receivedAt.trim() !== "" &&
     (row.receivedDateTime === undefined || typeof row.receivedDateTime === "string") &&
+    isEmailDetailContent(row.detail) &&
     Array.isArray(row.labels) &&
     row.labels.every((l) => typeof l === "string") &&
     (row.readState === undefined ||

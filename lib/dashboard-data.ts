@@ -132,6 +132,12 @@ function isDashboardSnapshot(value: unknown): value is DashboardSnapshotV1 {
   );
 }
 
+function isEmailDetailContent(value: unknown): boolean {
+  if (value === undefined) return true;
+  if (!isRecord(value)) return false;
+  return typeof value.contentExcerpt === "string";
+}
+
 function isEmailInboxItem(value: unknown): value is EmailInboxItem {
   return (
     isRecord(value) &&
@@ -146,7 +152,8 @@ function isEmailInboxItem(value: unknown): value is EmailInboxItem {
         (value.identifiedAction.state === "proposed" ||
           value.identifiedAction.state === "confirmed") &&
         (value.identifiedAction.actionType === undefined ||
-          typeof value.identifiedAction.actionType === "string")))
+          typeof value.identifiedAction.actionType === "string"))) &&
+    isEmailDetailContent(value.detail)
   );
 }
 
@@ -185,6 +192,7 @@ function isEmailDashboardSourceSnapshotV1(
     if (typeof row.subject !== "string") return false;
     if (typeof row.receivedAt !== "string" || row.receivedAt.trim() === "") return false;
     if (row.receivedDateTime !== undefined && typeof row.receivedDateTime !== "string") return false;
+    if (!isEmailDetailContent(row.detail)) return false;
     if (!Array.isArray(row.labels)) return false;
     if (!row.labels.every((l: unknown) => typeof l === "string")) return false;
 
@@ -541,6 +549,7 @@ function emailDashboardRowToInboxItem(row: EmailDashboardRowV1): EmailInboxItem 
     receivedDateTime: row.receivedAt ?? row.receivedDateTime ?? "",
     labels: row.labels,
     subject: row.subject,
+    detail: row.detail,
     identifiedAction: row.identifiedAction
       ? {
           state: row.identifiedAction.state,

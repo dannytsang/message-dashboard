@@ -95,12 +95,18 @@ export interface EmailIdentifiedAction {
   actionType?: string;
 }
 
+export interface EmailDetailContent {
+  /** Dashboard-safe body/snippet excerpt, never a raw full mailbox payload. */
+  contentExcerpt: string;
+}
+
 export interface EmailInboxItem {
   id: string;
   receivedDateTime: string;
   labels: string[];
   subject: string;
   identifiedAction?: EmailIdentifiedAction;
+  detail?: EmailDetailContent;
 }
 
 export interface EmailInboxDisplayItem extends EmailInboxItem {
@@ -140,6 +146,7 @@ export interface EmailDashboardRowV1 {
   sortKey?: string;
   searchText?: string;
   sourceStatus?: "available";
+  detail?: EmailDetailContent;
 }
 
 export interface EmailDashboardIdentifiedActionV1 {

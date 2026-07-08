@@ -34,6 +34,7 @@ export default function EmailsInboxPage({
   const [query, setQuery] = useState("");
   const [actionOnly, setActionOnly] = useState(false);
   const [sort, setSort] = useState<SortMode>("latest-received");
+  const [selectedId, setSelectedId] = useState<string | null>(items[0]?.id ?? null);
 
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
@@ -78,6 +79,11 @@ export default function EmailsInboxPage({
 
   const hasActiveFilters =
     query.trim() !== "" || actionOnly || sort !== "latest-received";
+
+  const selectedItem = useMemo(() => {
+    if (filtered.length === 0) return null;
+    return filtered.find((item) => item.id === selectedId) ?? filtered[0] ?? null;
+  }, [filtered, selectedId]);
 
   function clearFilters() {
     setQuery("");
@@ -179,31 +185,109 @@ export default function EmailsInboxPage({
           </p>
         </div>
       ) : (
-        <ul className={styles.inboxList} role="list">
-          {filtered.map((item) => (
-            <EmailRow key={item.id} item={item} />
-          ))}
-        </ul>
+        <div className={styles.emailWorkspace}>
+          <ul className={styles.inboxList} role="list" aria-label="Email inbox">
+            {filtered.map((item) => (
+              <EmailRow
+                key={item.id}
+                item={item}
+                isSelected={item.id === selectedItem?.id}
+                onSelect={() => setSelectedId(item.id)}
+              />
+            ))}
+          </ul>
+          <EmailDetailPane item={selectedItem} />
+        </div>
       )}
     </main>
   );
 }
 
-function EmailRow({ item }: { item: EmailInboxDisplayItem }) {
+function EmailRow({
+  item,
+  isSelected,
+  onSelect,
+}: {
+  item: EmailInboxDisplayItem;
+  isSelected: boolean;
+  onSelect: () => void;
+}) {
   const action = item.identifiedAction;
 
   return (
     <li className={styles.inboxRow}>
-      {/* Column 1: received date/time */}
-      <div className={styles.rowDate}>
-        <span className={styles.rowDateLabel}>{item.receivedLabel}</span>
-        <time className={styles.rowTime} dateTime={item.receivedDateTime}>
-          {item.receivedTime}
+      <button
+        type="button"
+        className={`${styles.rowButton} ${isSelected ? styles.rowButtonSelected : ""}`}
+        aria-pressed={isSelected}
+        onClick={onSelect}
+      >
+        {/* Column 1: received date/time */}
+        <div className={styles.rowDate}>
+          <span className={styles.rowDateLabel}>{item.receivedLabel}</span>
+          <time className={styles.rowTime} dateTime={item.receivedDateTime}>
+            {item.receivedTime}
+          </time>
+        </div>
+
+        {/* Column 2: labels */}
+        <div className={styles.rowLabels}>
+          {item.labels.map((label) => (
+            <span key={label} className={styles.labelChip}>
+              {label}
+            </span>
+          ))}
+        </div>
+
+        {/* Column 3: subject + action — Subject Priority A */}
+        <div className={styles.rowSubjectArea}>
+          <span className={styles.rowSubjectText}>{item.subject}</span>
+          {action && (
+            <div className={styles.rowActionArea}>
+              {action.actionType && (
+                <span className={styles.actionType}>{action.actionType}</span>
+              )}
+              <span className={styles.actionPhrase}>{action.actionPhrase}</span>
+              <span
+                className={`${styles.actionBadge} ${
+                  action.state === "confirmed"
+                    ? styles.actionBadgeConfirmed
+                    : styles.actionBadgeProposed
+                }`}
+              >
+                {action.state === "confirmed" ? "Confirmed" : "Proposed"}
+              </span>
+            </div>
+          )}
+        </div>
+      </button>
+    </li>
+  );
+}
+
+function EmailDetailPane({ item }: { item: EmailInboxDisplayItem | null }) {
+  if (!item) {
+    return (
+      <aside className={styles.detailPane} aria-live="polite">
+        <p className={styles.detailEmptyTitle}>No email selected</p>
+        <p className={styles.detailEmptyBody}>Select an email to review its content and action required.</p>
+      </aside>
+    );
+  }
+
+  const action = item.identifiedAction;
+
+  return (
+    <aside className={styles.detailPane} aria-live="polite" aria-label="Selected email detail">
+      <div className={styles.detailHeader}>
+        <span className={styles.detailSource}>Email</span>
+        <time className={styles.detailTime} dateTime={item.receivedDateTime}>
+          {item.receivedLabel} · {item.receivedTime}
         </time>
       </div>
+      <h2 className={styles.detailSubject}>{item.subject}</h2>
 
-      {/* Column 2: labels */}
-      <div className={styles.rowLabels}>
+      <div className={styles.detailLabels}>
         {item.labels.map((label) => (
           <span key={label} className={styles.labelChip}>
             {label}
@@ -211,27 +295,35 @@ function EmailRow({ item }: { item: EmailInboxDisplayItem }) {
         ))}
       </div>
 
-      {/* Column 3: subject + action — Subject Priority A */}
-      <div className={styles.rowSubjectArea}>
-        <span className={styles.rowSubjectText}>{item.subject}</span>
-        {action && (
-          <div className={styles.rowActionArea}>
-            {action.actionType && (
-              <span className={styles.actionType}>{action.actionType}</span>
-            )}
-            <span className={styles.actionPhrase}>{action.actionPhrase}</span>
-            <span
-              className={`${styles.actionBadge} ${
-                action.state === "confirmed"
-                  ? styles.actionBadgeConfirmed
-                  : styles.actionBadgeProposed
-              }`}
-            >
-              {action.state === "confirmed" ? "Confirmed" : "Proposed"}
-            </span>
+      <section className={styles.detailSection}>
+        <h3 className={styles.detailSectionTitle}>Action required</h3>
+        {action ? (
+          <div className={styles.detailActionCard}>
+            <div className={styles.rowActionArea}>
+              {action.actionType && <span className={styles.actionType}>{action.actionType}</span>}
+              <span
+                className={`${styles.actionBadge} ${
+                  action.state === "confirmed"
+                    ? styles.actionBadgeConfirmed
+                    : styles.actionBadgeProposed
+                }`}
+              >
+                {action.state === "confirmed" ? "Confirmed" : "Proposed"}
+              </span>
+            </div>
+            <p className={styles.detailActionText}>{action.actionPhrase}</p>
           </div>
+        ) : (
+          <p className={styles.detailMuted}>No action identified for this email.</p>
         )}
-      </div>
-    </li>
+      </section>
+
+      <section className={styles.detailSection}>
+        <h3 className={styles.detailSectionTitle}>Email content</h3>
+        <p className={styles.detailContent}>
+          {item.detail?.contentExcerpt?.trim() || "No safe email excerpt is available for this item."}
+        </p>
+      </section>
+    </aside>
   );
 }

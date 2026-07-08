@@ -165,6 +165,9 @@ export const emailInboxFixtureItems: EmailInboxItem[] = [
     receivedDateTime: "2026-07-01T07:55:00Z",
     labels: ["Inbox", "Finance"],
     subject: "Expense reconciliation form due today",
+    detail: {
+      contentExcerpt: "Please complete the fictional expense reconciliation form before end of day so the finance pack can be closed.",
+    },
     identifiedAction: {
       state: "proposed",
       actionPhrase: "Complete the reconciliation form",
@@ -176,6 +179,9 @@ export const emailInboxFixtureItems: EmailInboxItem[] = [
     receivedDateTime: "2026-07-01T06:40:00Z",
     labels: ["Inbox", "Planning"],
     subject: "Guest list update ready for confirmation",
+    detail: {
+      contentExcerpt: "The updated fictional guest list is attached for review. Please confirm whether the changes are acceptable.",
+    },
     identifiedAction: {
       state: "confirmed",
       actionPhrase: "Confirm guest list change",
@@ -187,6 +193,9 @@ export const emailInboxFixtureItems: EmailInboxItem[] = [
     receivedDateTime: "2026-06-30T12:15:00Z",
     labels: ["Inbox", "Travel"],
     subject: "Review the fictional rail booking change notice",
+    detail: {
+      contentExcerpt: "A fictional rail booking has changed. Review the proposed new timing and decide whether to accept the change.",
+    },
     identifiedAction: {
       state: "proposed",
       actionPhrase: "Review the proposed booking change",
