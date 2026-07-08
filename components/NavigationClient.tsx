@@ -1,5 +1,6 @@
 "use client";
 
+import Image from "next/image";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import SessionSurface from "./SessionSurface";
@@ -29,7 +30,17 @@ export default function NavigationClient({
   return (
     <nav className={styles.nav} aria-label="Main navigation">
       <div className={styles.inner}>
-        <span className={styles.brand}>Comms Dashboard</span>
+        <span className={styles.brand}>
+          <Image
+            src="/icon.svg"
+            alt=""
+            aria-hidden="true"
+            width={22}
+            height={22}
+            className={styles.brandIcon}
+          />
+          <span>Comms Dashboard</span>
+        </span>
         <div className={styles.right}>
           <ul className={styles.links} role="list">
             {navItems.map(({ href, label }) => {
