@@ -319,7 +319,8 @@ function EmailDetailPane({ item }: { item: EmailInboxDisplayItem | null }) {
       </section>
 
       <section className={styles.detailSection}>
-        <h3 className={styles.detailSectionTitle}>Email content</h3>
+        <h3 className={styles.detailSectionTitle}>Email body</h3>
+        <p className={styles.detailHint}>Full read-only body text from Gmail where available; long emails stay scrollable inside this pane.</p>
         <p className={styles.detailContent}>
           {item.detail?.contentExcerpt?.trim() || "No safe email excerpt is available for this item."}
         </p>

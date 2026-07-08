@@ -20,7 +20,6 @@ import { EMAIL_SOURCE_PATH } from "@/lib/blob-storage";
  *
  * Privacy rules enforced here:
  * - no OAuth tokens or credential paths;
- * - no Gmail raw bodies;
  * - no sender email addresses;
  * - no private local paths or attachment paths;
  * - IDs must be opaque dashboard IDs supplied by the monitor, not raw Gmail IDs.
@@ -34,6 +33,7 @@ interface MonitorEmailRow {
   labels?: string[];
   readState?: "read" | "unread" | "unknown";
   identifiedAction?: MonitorAction | null;
+  detail?: { contentExcerpt?: string };
 }
 
 interface MonitorAction {
@@ -74,6 +74,7 @@ function toEmailDashboardRow(row: MonitorEmailRow): EmailDashboardRowV1 {
     labels: row.labels ?? [],
     ...(row.readState ? { readState: row.readState } : {}),
     identifiedAction: row.identifiedAction ? toEmailDashboardAction(row.identifiedAction) : undefined,
+    ...(row.detail?.contentExcerpt ? { detail: { contentExcerpt: row.detail.contentExcerpt } } : {}),
   };
 }
 
@@ -148,6 +149,7 @@ export function toEmailInboxDisplayItem(
     receivedTime: displayFields.receivedTime,
     labels: inboxItem.labels,
     identifiedAction: inboxItem.identifiedAction,
+    detail: inboxItem.detail,
   };
 }
 
@@ -200,6 +202,15 @@ function validateEmailRow(label: string, row: EmailDashboardRowV1): void {
   }
   if (!Array.isArray(row.labels) || row.labels.some((value) => typeof value !== "string")) {
     throw new Error(`${label}: labels must contain only strings`);
+  }
+  if (row.detail !== undefined) {
+    if (
+      row.detail === null ||
+      typeof row.detail !== "object" ||
+      typeof row.detail.contentExcerpt !== "string"
+    ) {
+      throw new Error(`${label}.detail.contentExcerpt must be a string when detail is present`);
+    }
   }
   if (row.identifiedAction !== undefined && row.identifiedAction !== null) {
     const action = row.identifiedAction;

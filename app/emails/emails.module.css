@@ -173,7 +173,7 @@
 
 .emailWorkspace {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(320px, 420px);
+  grid-template-columns: minmax(360px, 0.9fr) minmax(420px, 1.1fr);
   gap: var(--space-md);
   align-items: start;
 }
@@ -400,6 +400,7 @@
 
 .detailTime,
 .detailMuted,
+.detailHint,
 .detailEmptyBody {
   color: var(--color-text-secondary);
   font-size: 0.8125rem;
@@ -444,9 +445,14 @@
 .detailActionText,
 .detailContent {
   color: var(--color-text-primary);
-  font-size: 0.9rem;
-  line-height: 1.6;
+  font-size: 0.9375rem;
+  line-height: 1.65;
   white-space: pre-wrap;
+}
+
+.detailHint {
+  margin: -2px 0 var(--space-sm);
+  line-height: 1.5;
 }
 
 .detailActionText {

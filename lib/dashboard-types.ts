@@ -96,7 +96,7 @@ export interface EmailIdentifiedAction {
 }
 
 export interface EmailDetailContent {
-  /** Dashboard-safe body/snippet excerpt, never a raw full mailbox payload. */
+  /** Dashboard-safe body/detail text, preferably full read-only Gmail body text capped by the monitor. */
   contentExcerpt: string;
 }
 
