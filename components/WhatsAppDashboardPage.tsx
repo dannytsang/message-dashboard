@@ -21,14 +21,19 @@ interface WhatsAppDashboardPageProps {
   dataMode: "live";
 }
 
+interface CombinedConversationItem extends WhatsAppConversationItem {
+  origins: WhatsAppConversationListKey[];
+}
+
 interface ConversationBucket {
   id: "now" | "next" | "recent";
   label: string;
   helper: string;
-  items: WhatsAppConversationItem[];
+  items: CombinedConversationItem[];
 }
 
 type ConversationKindFilter = "all" | "group" | "direct";
+type ConversationSourceFilter = "all" | "monitored" | "drafts";
 type ConversationOperationalFilter = "all" | "action_required" | "needs_review";
 type FollowUpOperationalFilter = "all" | "action_required" | "needs_review";
 
@@ -47,6 +52,12 @@ const conversationKindFilterLabels: Record<ConversationKindFilter, string> = {
   all: "All chats",
   group: "Groups",
   direct: "Direct",
+};
+
+const conversationSourceFilterLabels: Record<ConversationSourceFilter, string> = {
+  all: "All sources",
+  monitored: "Monitored",
+  drafts: "Drafts",
 };
 
 const conversationOperationalFilterLabels: Record<ConversationOperationalFilter, string> = {
@@ -97,6 +108,42 @@ function matchesConversationKind(
   kindFilter: ConversationKindFilter,
 ) {
   return kindFilter === "all" || item.kind === kindFilter;
+}
+
+function matchesConversationSource(item: CombinedConversationItem, sourceFilter: ConversationSourceFilter) {
+  return sourceFilter === "all" || item.origins.includes(sourceFilter === "drafts" ? "drafts" : "monitored");
+}
+
+function combineConversationItems(
+  monitored: WhatsAppConversationItem[],
+  drafts: WhatsAppConversationItem[],
+): CombinedConversationItem[] {
+  const byId = new Map<string, CombinedConversationItem>();
+
+  for (const item of monitored) {
+    byId.set(item.id, { ...item, origins: ["monitored"] });
+  }
+
+  for (const item of drafts) {
+    const existing = byId.get(item.id);
+    if (!existing) {
+      byId.set(item.id, { ...item, origins: ["drafts"] });
+      continue;
+    }
+
+    byId.set(item.id, {
+      ...existing,
+      ...item,
+      origins: ["monitored", "drafts"],
+      listNotes: [...(existing.listNotes ?? []), ...(item.listNotes ?? [])],
+      timeline: item.timeline.length > 0 ? item.timeline : existing.timeline,
+      historySummary: item.historySummary ?? existing.historySummary,
+      pendingDraftSnippet: item.pendingDraftSnippet ?? existing.pendingDraftSnippet,
+      draftSummary: item.draftSummary ?? existing.draftSummary,
+    });
+  }
+
+  return Array.from(byId.values());
 }
 
 function hasActionRequiredConversationState(item: WhatsAppConversationItem) {
@@ -171,8 +218,8 @@ function compareConversationByName(a: WhatsAppConversationItem, b: WhatsAppConve
   return compareConversationByLatest(a, b);
 }
 
-function sortConversations(
-  items: WhatsAppConversationItem[],
+function sortConversations<T extends WhatsAppConversationItem>(
+  items: T[],
   sort: WhatsAppConversationSortMode,
 ) {
   return [...items].sort(sort === "name-a-z" ? compareConversationByName : compareConversationByLatest);
@@ -269,7 +316,7 @@ function kindLabel(kind: WhatsAppConversationItem["kind"] | WhatsAppFollowUpItem
 }
 
 function bucketConversationItems(
-  items: WhatsAppConversationItem[],
+  items: CombinedConversationItem[],
   snapshotGeneratedAt: string,
 ): ConversationBucket[] {
   const generatedAt = new Date(snapshotGeneratedAt).getTime();
@@ -302,55 +349,67 @@ function bucketConversationItems(
   return buckets.filter((bucket) => bucket.items.length > 0);
 }
 
-function conversationRowTokens(item: WhatsAppConversationItem, origin: WhatsAppConversationListKey) {
+function conversationRowTokens(item: CombinedConversationItem) {
   const tokens: string[] = [];
 
-  if (origin === "drafts" && item.pendingDraftSnippet) {
-    tokens.push(`Draft · ${item.pendingDraftSnippet}`);
+  if (item.origins.includes("monitored")) {
+    tokens.push("Monitored");
+  }
+
+  if (item.origins.includes("drafts")) {
+    tokens.push("Draft");
+  }
+
+  if (hasActionRequiredConversationState(item)) {
+    tokens.push("Action");
+  }
+
+  if (hasReviewConversationState(item)) {
+    tokens.push("Review");
   }
 
   if (item.listNotes?.length) {
     tokens.push(...item.listNotes);
   }
 
-  return tokens;
+  return Array.from(new Set(tokens));
 }
 
 export default function WhatsAppDashboardPage({
   snapshot,
   dataMode,
 }: WhatsAppDashboardPageProps) {
-  const [monitoredQuery, setMonitoredQuery] = useState("");
-  const [draftsQuery, setDraftsQuery] = useState("");
+  const [conversationQuery, setConversationQuery] = useState("");
   const [followUpQuery, setFollowUpQuery] = useState("");
-  const [monitoredSort, setMonitoredSort] =
+  const [conversationSort, setConversationSort] =
     useState<WhatsAppConversationSortMode>("latest-message");
-  const [draftsSort, setDraftsSort] = useState<WhatsAppConversationSortMode>("latest-message");
-  const [monitoredKindFilter, setMonitoredKindFilter] =
+  const [conversationKindFilter, setConversationKindFilter] =
     useState<ConversationKindFilter>("all");
-  const [draftsKindFilter, setDraftsKindFilter] = useState<ConversationKindFilter>("all");
-  const [monitoredStatusFilter, setMonitoredStatusFilter] =
-    useState<ConversationOperationalFilter>("action_required");
-  const [draftsStatusFilter, setDraftsStatusFilter] =
+  const [conversationSourceFilter, setConversationSourceFilter] =
+    useState<ConversationSourceFilter>("all");
+  const [conversationStatusFilter, setConversationStatusFilter] =
     useState<ConversationOperationalFilter>("action_required");
   const [followUpSort, setFollowUpSort] =
     useState<WhatsAppFollowUpSortMode>("latest-message");
   const [followUpFilter, setFollowUpFilter] =
     useState<FollowUpOperationalFilter>("action_required");
-  const [selection, setSelection] = useState<{
-    conversationId: string;
-    origin: WhatsAppConversationListKey;
-  } | null>(snapshot.monitored[0] ? { conversationId: snapshot.monitored[0].id, origin: "monitored" } : null);
+
+  const combinedConversations = useMemo(
+    () => combineConversationItems(snapshot.monitored, snapshot.drafts),
+    [snapshot.drafts, snapshot.monitored],
+  );
+
+  const [selection, setSelection] = useState<{ conversationId: string } | null>(
+    combinedConversations[0] ? { conversationId: combinedConversations[0].id } : null,
+  );
 
   const conversationLookup = useMemo(() => {
-    const map = new Map<string, WhatsAppConversationItem>();
-    for (const item of [...snapshot.monitored, ...snapshot.drafts]) {
-      if (!map.has(item.id)) {
-        map.set(item.id, item);
-      }
+    const map = new Map<string, CombinedConversationItem>();
+    for (const item of combinedConversations) {
+      map.set(item.id, item);
     }
     return map;
-  }, [snapshot.drafts, snapshot.monitored]);
+  }, [combinedConversations]);
 
   const selectedConversation = selection
     ? conversationLookup.get(selection.conversationId) ?? null
@@ -376,66 +435,37 @@ export default function WhatsAppDashboardPage({
     return ids;
   }, [snapshot.followUps]);
 
-  const monitoredItems = useMemo(() => {
-    const query = normalizeQuery(monitoredQuery);
+  const conversationItems = useMemo(() => {
+    const query = normalizeQuery(conversationQuery);
     return sortConversations(
-      snapshot.monitored.filter(
+      combinedConversations.filter(
         (item) =>
           matchesDisplayName(item.displayName, query) &&
-          matchesConversationKind(item, monitoredKindFilter) &&
+          matchesConversationKind(item, conversationKindFilter) &&
+          matchesConversationSource(item, conversationSourceFilter) &&
           matchesConversationOperationalFilter(
             item,
-            monitoredStatusFilter,
+            conversationStatusFilter,
             actionConversationIds,
             reviewConversationIds,
           ),
       ),
-      monitoredSort,
+      conversationSort,
     );
   }, [
     actionConversationIds,
-    monitoredKindFilter,
-    monitoredQuery,
-    monitoredSort,
-    monitoredStatusFilter,
+    combinedConversations,
+    conversationKindFilter,
+    conversationQuery,
+    conversationSort,
+    conversationSourceFilter,
+    conversationStatusFilter,
     reviewConversationIds,
-    snapshot.monitored,
   ]);
 
-  const draftItems = useMemo(() => {
-    const query = normalizeQuery(draftsQuery);
-    return sortConversations(
-      snapshot.drafts.filter(
-        (item) =>
-          matchesDisplayName(item.displayName, query) &&
-          matchesConversationKind(item, draftsKindFilter) &&
-          matchesConversationOperationalFilter(
-            item,
-            draftsStatusFilter,
-            actionConversationIds,
-            reviewConversationIds,
-          ),
-      ),
-      draftsSort,
-    );
-  }, [
-    actionConversationIds,
-    draftsKindFilter,
-    draftsQuery,
-    draftsSort,
-    draftsStatusFilter,
-    reviewConversationIds,
-    snapshot.drafts,
-  ]);
-
-  const monitoredBuckets = useMemo(
-    () => bucketConversationItems(monitoredItems, snapshot.generatedAt),
-    [monitoredItems, snapshot.generatedAt],
-  );
-
-  const draftBuckets = useMemo(
-    () => bucketConversationItems(draftItems, snapshot.generatedAt),
-    [draftItems, snapshot.generatedAt],
+  const conversationBuckets = useMemo(
+    () => bucketConversationItems(conversationItems, snapshot.generatedAt),
+    [conversationItems, snapshot.generatedAt],
   );
 
   const followUpItems = useMemo(() => {
@@ -453,11 +483,10 @@ export default function WhatsAppDashboardPage({
   useEffect(() => {
     if (!selection) return;
 
-    const visibleItems = selection.origin === "monitored" ? monitoredItems : draftItems;
-    if (!visibleItems.some((item) => item.id === selection.conversationId)) {
+    if (!conversationItems.some((item) => item.id === selection.conversationId)) {
       setSelection(null);
     }
-  }, [draftItems, monitoredItems, selection]);
+  }, [conversationItems, selection]);
 
   const selectedFollowUps = selectedConversation
     ? snapshot.followUps.filter((item) => item.conversationId === selectedConversation.id)
@@ -473,59 +502,35 @@ export default function WhatsAppDashboardPage({
       </header>
 
       <div className={styles.dashboard}>
-        <section className={styles.splitPane} aria-label="WhatsApp monitored conversations and history">
+        <section className={styles.splitPane} aria-label="WhatsApp messages and history">
           <div className={styles.sidePane}>
             <ConversationSection
-              title="Monitored"
-              subtitle="Read-only watched conversations with recent safe message context."
+              title="Messages"
+              subtitle="Combined monitored and draft-response conversations with source tags."
               countLabel={countLabel(
-                monitoredItems.length,
-                "monitored conversation",
-                "monitored conversations",
+                conversationItems.length,
+                "message conversation",
+                "message conversations",
               )}
-              searchValue={monitoredQuery}
-              onSearchChange={setMonitoredQuery}
-              searchPlaceholder="Search monitored by display name"
-              sort={monitoredSort}
-              onSortChange={setMonitoredSort}
-              kindFilter={monitoredKindFilter}
-              onKindFilterChange={setMonitoredKindFilter}
-              statusFilter={monitoredStatusFilter}
-              onStatusFilterChange={setMonitoredStatusFilter}
-              buckets={monitoredBuckets}
-              origin="monitored"
+              searchValue={conversationQuery}
+              onSearchChange={setConversationQuery}
+              searchPlaceholder="Search messages by display name"
+              sort={conversationSort}
+              onSortChange={setConversationSort}
+              kindFilter={conversationKindFilter}
+              onKindFilterChange={setConversationKindFilter}
+              sourceFilter={conversationSourceFilter}
+              onSourceFilterChange={setConversationSourceFilter}
+              statusFilter={conversationStatusFilter}
+              onStatusFilterChange={setConversationStatusFilter}
+              buckets={conversationBuckets}
               selectedConversationId={selection?.conversationId ?? null}
-              onSelect={(conversationId) => setSelection({ conversationId, origin: "monitored" })}
-              emptyTitle={snapshot.monitored.length === 0 ? "No monitored conversations" : "No matching monitored conversations"}
+              onSelect={(conversationId) => setSelection({ conversationId })}
+              emptyTitle={combinedConversations.length === 0 ? "No WhatsApp messages" : "No matching WhatsApp messages"}
               emptyBody={
-                snapshot.monitored.length === 0
-                  ? "Monitored WhatsApp conversations will appear here once the server-side dashboard feed is connected."
-                  : "Try clearing or broadening the display-name search for monitored chats."
-              }
-            />
-
-            <ConversationSection
-              title="Draft responses"
-              subtitle="Chats with a pending draft response waiting for review only."
-              countLabel={countLabel(draftItems.length, "draft conversation", "draft conversations")}
-              searchValue={draftsQuery}
-              onSearchChange={setDraftsQuery}
-              searchPlaceholder="Search drafts by display name"
-              sort={draftsSort}
-              onSortChange={setDraftsSort}
-              kindFilter={draftsKindFilter}
-              onKindFilterChange={setDraftsKindFilter}
-              statusFilter={draftsStatusFilter}
-              onStatusFilterChange={setDraftsStatusFilter}
-              buckets={draftBuckets}
-              origin="drafts"
-              selectedConversationId={selection?.conversationId ?? null}
-              onSelect={(conversationId) => setSelection({ conversationId, origin: "drafts" })}
-              emptyTitle={snapshot.drafts.length === 0 ? "No draft-response conversations" : "No matching draft-response conversations"}
-              emptyBody={
-                snapshot.drafts.length === 0
-                  ? "Pending-draft conversations will appear here without exposing any send or approval actions."
-                  : "Try clearing or broadening the display-name search for draft-response chats."
+                combinedConversations.length === 0
+                  ? "Monitored and draft-response WhatsApp conversations will appear here once the server-side dashboard feed is connected."
+                  : "Try clearing or broadening the display-name, source, status, or type filters."
               }
             />
           </div>
@@ -564,10 +569,11 @@ interface ConversationSectionProps {
   onSortChange: (value: WhatsAppConversationSortMode) => void;
   kindFilter: ConversationKindFilter;
   onKindFilterChange: (value: ConversationKindFilter) => void;
+  sourceFilter: ConversationSourceFilter;
+  onSourceFilterChange: (value: ConversationSourceFilter) => void;
   statusFilter: ConversationOperationalFilter;
   onStatusFilterChange: (value: ConversationOperationalFilter) => void;
   buckets: ConversationBucket[];
-  origin: WhatsAppConversationListKey;
   selectedConversationId: string | null;
   onSelect: (conversationId: string) => void;
   emptyTitle: string;
@@ -585,10 +591,11 @@ function ConversationSection({
   onSortChange,
   kindFilter,
   onKindFilterChange,
+  sourceFilter,
+  onSourceFilterChange,
   statusFilter,
   onStatusFilterChange,
   buckets,
-  origin,
   selectedConversationId,
   onSelect,
   emptyTitle,
@@ -597,11 +604,11 @@ function ConversationSection({
   const visibleCount = buckets.reduce((sum, bucket) => sum + bucket.items.length, 0);
 
   return (
-    <section className={styles.sectionCard} aria-labelledby={`${origin}-title`}>
+    <section className={styles.sectionCard} aria-labelledby="messages-title">
       <div className={styles.stickySectionControls}>
         <div className={styles.sectionHeader}>
           <div className={styles.sectionTitleWrap}>
-            <h2 id={`${origin}-title`} className={styles.sectionTitle}>
+            <h2 id="messages-title" className={styles.sectionTitle}>
               {title}
             </h2>
             <p className={styles.sectionSubtitle}>{subtitle}</p>
@@ -620,11 +627,11 @@ function ConversationSection({
           <div className={styles.controlsRow}>
             <div className={styles.filterControls}>
               <div className={styles.sortWrap}>
-                <label className={styles.sortLabel} htmlFor={`${origin}-kind`}>
+                <label className={styles.sortLabel} htmlFor="messages-kind">
                   Type
                 </label>
                 <select
-                  id={`${origin}-kind`}
+                  id="messages-kind"
                   className={styles.sortSelect}
                   value={kindFilter}
                   onChange={(event) => onKindFilterChange(event.target.value as ConversationKindFilter)}
@@ -638,11 +645,29 @@ function ConversationSection({
               </div>
 
               <div className={styles.sortWrap}>
-                <label className={styles.sortLabel} htmlFor={`${origin}-status`}>
+                <label className={styles.sortLabel} htmlFor="messages-source">
+                  Source
+                </label>
+                <select
+                  id="messages-source"
+                  className={styles.sortSelect}
+                  value={sourceFilter}
+                  onChange={(event) => onSourceFilterChange(event.target.value as ConversationSourceFilter)}
+                >
+                  {Object.entries(conversationSourceFilterLabels).map(([value, label]) => (
+                    <option key={value} value={value}>
+                      {label}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div className={styles.sortWrap}>
+                <label className={styles.sortLabel} htmlFor="messages-status">
                   Status
                 </label>
                 <select
-                  id={`${origin}-status`}
+                  id="messages-status"
                   className={styles.sortSelect}
                   value={statusFilter}
                   onChange={(event) => onStatusFilterChange(event.target.value as ConversationOperationalFilter)}
@@ -656,11 +681,11 @@ function ConversationSection({
               </div>
 
               <div className={styles.sortWrap}>
-                <label className={styles.sortLabel} htmlFor={`${origin}-sort`}>
+                <label className={styles.sortLabel} htmlFor="messages-sort">
                   Sort
                 </label>
                 <select
-                  id={`${origin}-sort`}
+                  id="messages-sort"
                   className={styles.sortSelect}
                   value={sort}
                   onChange={(event) => onSortChange(event.target.value as WhatsAppConversationSortMode)}
@@ -683,7 +708,7 @@ function ConversationSection({
       ) : (
         <div className={styles.bucketStack}>
           {buckets.map((bucket) => (
-            <section key={`${origin}-${bucket.id}`} className={styles.bucketSection}>
+            <section key={`messages-${bucket.id}`} className={styles.bucketSection}>
               <div className={styles.bucketHeader}>
                 <div>
                   <h3 className={styles.bucketTitle}>{bucket.label}</h3>
@@ -694,10 +719,9 @@ function ConversationSection({
               <ul className={styles.list} role="list">
                 {bucket.items.map((item) => (
                   <ConversationRow
-                    key={`${origin}-${item.id}`}
+                    key={`messages-${item.id}`}
                     item={item}
                     isSelected={selectedConversationId === item.id}
-                    origin={origin}
                     onSelect={() => onSelect(item.id)}
                   />
                 ))}
@@ -749,17 +773,15 @@ function SearchInput({
 function ConversationRow({
   item,
   isSelected,
-  origin,
   onSelect,
 }: {
-  item: WhatsAppConversationItem;
+  item: CombinedConversationItem;
   isSelected: boolean;
-  origin: WhatsAppConversationListKey;
   onSelect: () => void;
 }) {
   const absoluteTime = formatDashboardDateTime(item.lastMessageAt) ?? "Unknown time";
   const relativeTime = formatDashboardRelativeDateTime(item.lastMessageAt) ?? "No recent timestamp";
-  const rowTokens = conversationRowTokens(item, origin);
+  const rowTokens = conversationRowTokens(item);
 
   return (
     <li>
@@ -779,7 +801,7 @@ function ConversationRow({
               >
                 {kindLabel(item.kind)}
               </span>
-              {origin === "drafts" && <span className={styles.draftBadge}>Pending draft</span>}
+
             </div>
             <span className={styles.displayName}>{item.displayName}</span>
           </div>
@@ -813,8 +835,8 @@ function HistoryPane({
   followUps,
   onClearSelection,
 }: {
-  selection: { conversationId: string; origin: WhatsAppConversationListKey } | null;
-  conversation: WhatsAppConversationItem | null;
+  selection: { conversationId: string } | null;
+  conversation: CombinedConversationItem | null;
   followUps: WhatsAppFollowUpItem[];
   onClearSelection: () => void;
 }) {
@@ -826,12 +848,12 @@ function HistoryPane({
             Conversation history
           </h2>
           <p className={styles.sectionSubtitle}>
-            Select a conversation from Monitored or Draft responses to open safe recent history inside the WhatsApp dashboard.
+            Select a conversation from Messages to open safe recent history inside the WhatsApp dashboard.
           </p>
         </div>
         <EmptyState
           title="No conversation selected"
-          body="Choose a monitored or draft-response chat to view recent timeline context, pending draft notes, and related scheduled follow-ups without leaving this dashboard."
+          body="Choose a message conversation to view recent timeline context, source tags, pending draft notes, and related scheduled follow-ups without leaving this dashboard."
         />
       </section>
     );
@@ -849,9 +871,11 @@ function HistoryPane({
             >
               {kindLabel(conversation.kind)}
             </span>
-            <span className={styles.originBadge}>
-              Opened from {selection.origin === "monitored" ? "Monitored" : "Draft responses"}
-            </span>
+            {conversation.origins.map((origin) => (
+              <span key={origin} className={styles.originBadge}>
+                {origin === "monitored" ? "Monitored" : "Draft"}
+              </span>
+            ))}
           </div>
           <h2 id="history-pane-title" className={styles.title}>
             {conversation.displayName}
