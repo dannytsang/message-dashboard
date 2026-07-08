@@ -1,6 +1,7 @@
 import "server-only";
 import { createHash } from "node:crypto";
 import type {
+  ReviewMessageExcerpt,
   WhatsAppConversationHistoryEntryV1,
   WhatsAppConversationKind,
   WhatsAppConversationRowV1,
@@ -43,6 +44,7 @@ interface MonitorConversation {
   state?: WhatsAppConversationRowV1["state"];
   historySummary?: string;
   timeline?: MonitorTimelineEntry[];
+  reviewMessageExcerpt?: ReviewMessageExcerpt;
 }
 
 interface MonitorTimelineEntry {
@@ -72,6 +74,7 @@ interface MonitorFollowUp {
   topicSummary?: string;
   contextSummary?: string;
   confidenceLabel?: "low" | "medium" | "high";
+  reviewMessageExcerpt?: ReviewMessageExcerpt;
 }
 
 interface BuildOptions {
@@ -147,6 +150,7 @@ function sanitiseConversation(conv: MonitorConversation): WhatsAppConversationRo
     listNotes: conv.listNotes,
     historySummary: conv.historySummary,
     timeline: (conv.timeline ?? []).slice(0, MAX_TIMELINE_ENTRIES).map(sanitiseTimelineEntry),
+    reviewMessageExcerpt: conv.reviewMessageExcerpt,
   };
 }
 
@@ -165,6 +169,7 @@ function sanitiseFollowUp(item: MonitorFollowUp): WhatsAppFollowUpRowV1 {
     topicSummary: item.topicSummary,
     contextSummary: item.contextSummary,
     confidenceLabel: item.confidenceLabel,
+    reviewMessageExcerpt: item.reviewMessageExcerpt,
   };
 }
 

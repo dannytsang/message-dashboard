@@ -10,7 +10,6 @@ import type {
   CommunicationItem,
   ReviewMessageExcerpt,
   WhatsAppConversationItem,
-  WhatsAppConversationRowV1,
   WhatsAppFollowUpItem,
 } from "@/lib/dashboard-types";
 
@@ -102,36 +101,13 @@ export default async function HomePage() {
             : undefined,
       };
 
-      // For WhatsApp items in uncertain_needs_review status, attach a single
-      // inbound message excerpt from the contact's timeline so Danny has enough
-      // context to make an informed review decision in the Summary inspector.
-      // Only conversation items (monitored/drafts) carry a timeline.
+      // For WhatsApp items in uncertain_needs_review status, attach the single
+      // most relevant inbound message excerpt so Danny has enough context to
+      // make an informed review decision in the Summary inspector.
       const needsReview = base.status === "uncertain_needs_review";
-      if (needsReview && "timeline" in item && Array.isArray(item.timeline)) {
-        const rows = item.timeline as Array<{
-          speakerLabel?: string;
-          summary: string;
-          createdAt?: string;
-          direction: string;
-        }>;
-        const lastInbound = rows
-          .slice()
-          .reverse()
-          .find((e) => e.direction === "incoming" || e.direction === "inbound");
-
-        if (lastInbound) {
-          const sentLabel =
-            lastInbound.createdAt != null
-              ? formatDashboardDateTime(lastInbound.createdAt) ?? "Unknown time"
-              : "Unknown time";
-          const excerpt: ReviewMessageExcerpt = {
-            author: lastInbound.speakerLabel ?? "Contact",
-            body: lastInbound.summary,
-            sentLabel,
-            direction: "inbound",
-          };
-          return { ...base, reviewMessageExcerpt: excerpt };
-        }
+      const excerpt = needsReview ? reviewMessageExcerptForWhatsAppItem(item) : null;
+      if (excerpt) {
+        return { ...base, reviewMessageExcerpt: excerpt };
       }
 
       return base;
@@ -187,6 +163,56 @@ export default async function HomePage() {
   );
 }
 
+type WhatsAppSummaryItem =
+  | WhatsAppConversationItem
+  | WhatsAppFollowUpItem
+  | {
+      reviewMessageExcerpt?: ReviewMessageExcerpt;
+      timeline?: Array<{
+        speaker?: string;
+        speakerLabel?: string;
+        summary: string;
+        createdAt?: string;
+        sentAt?: string;
+        direction: string;
+      }>;
+    };
+
+function isInboundDirection(direction: string): boolean {
+  return direction === "incoming" || direction === "inbound";
+}
+
+function reviewMessageExcerptForWhatsAppItem(
+  item: WhatsAppSummaryItem,
+): ReviewMessageExcerpt | null {
+  if ("reviewMessageExcerpt" in item && item.reviewMessageExcerpt) {
+    return item.reviewMessageExcerpt;
+  }
+
+  if (!("timeline" in item) || !Array.isArray(item.timeline)) {
+    return null;
+  }
+
+  const lastInbound = item.timeline
+    .slice()
+    .reverse()
+    .find((entry) => isInboundDirection(entry.direction));
+  if (!lastInbound) return null;
+
+  const sentAt = "createdAt" in lastInbound
+    ? lastInbound.createdAt ?? lastInbound.sentAt
+    : lastInbound.sentAt;
+  const speakerLabel = "speakerLabel" in lastInbound ? lastInbound.speakerLabel : undefined;
+  return {
+    author: speakerLabel ?? lastInbound.speaker ?? "Contact",
+    body: lastInbound.summary,
+    sentLabel: sentAt
+      ? formatDashboardDateTime(sentAt) ?? "Unknown time"
+      : "Unknown time",
+    direction: "inbound",
+  };
+}
+
 /**
  * Derive a CommunicationStatus from a WhatsApp snapshot item.
  */
@@ -204,6 +230,8 @@ function getWhatsAppStatus(
         : undefined;
   if (typeof state === "string") {
     const stateMap: Record<string, CommunicationItem["status"]> = {
+      uncertain_needs_review: "uncertain_needs_review",
+      review_needed: "uncertain_needs_review",
       proposed: "open",
       scheduled: "open",
       due_soon: "open",

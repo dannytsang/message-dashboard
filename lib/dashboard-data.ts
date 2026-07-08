@@ -309,6 +309,7 @@ function isWhatsAppConversationRowV1(value: unknown): value is WhatsAppConversat
     isWhatsAppConversationKind(value.conversationKind) &&
     typeof value.displayName === "string" &&
     typeof value.lastMessageSummary === "string" &&
+    isReviewMessageExcerpt(value.reviewMessageExcerpt) &&
     (value.timeline === undefined ||
       (Array.isArray(value.timeline) &&
         value.timeline.length <= 20 &&
@@ -324,6 +325,17 @@ function isWhatsAppConversationRowV1(value: unknown): value is WhatsAppConversat
   );
 }
 
+function isReviewMessageExcerpt(value: unknown): boolean {
+  if (value === undefined) return true;
+  if (!isRecord(value)) return false;
+  return (
+    typeof value.author === "string" &&
+    typeof value.body === "string" &&
+    typeof value.sentLabel === "string" &&
+    (value.direction === "inbound" || value.direction === "outbound")
+  );
+}
+
 function isWhatsAppFollowUpRowV1(value: unknown): value is WhatsAppFollowUpRowV1 {
   return (
     isRecord(value) &&
@@ -333,7 +345,8 @@ function isWhatsAppFollowUpRowV1(value: unknown): value is WhatsAppFollowUpRowV1
     typeof value.displayName === "string" &&
     isWhatsAppFollowUpState(value.state) &&
     typeof value.title === "string" &&
-    (value.contextSummary === undefined || typeof value.contextSummary === "string")
+    (value.contextSummary === undefined || typeof value.contextSummary === "string") &&
+    isReviewMessageExcerpt(value.reviewMessageExcerpt)
   );
 }
 
@@ -426,6 +439,7 @@ function whatsAppConversationRowToUi(row: WhatsAppConversationRowV1): WhatsAppCo
     state: row.state,
     historySummary: row.historySummary,
     timeline: (row.timeline ?? []).map(timelineEntryToUi),
+    reviewMessageExcerpt: row.reviewMessageExcerpt,
   };
 }
 
@@ -442,6 +456,7 @@ function whatsAppFollowUpRowToUi(row: WhatsAppFollowUpRowV1): WhatsAppFollowUpIt
     relativeDueLabel: row.dueRelativeLabel,
     dueRelativeLabel: row.dueRelativeLabel,
     contextSummary: row.contextSummary ?? row.topicSummary ?? row.lastMessageSummary ?? "",
+    reviewMessageExcerpt: row.reviewMessageExcerpt,
   };
 }
 

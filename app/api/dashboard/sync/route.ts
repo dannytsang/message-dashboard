@@ -162,8 +162,21 @@ function isWhatsAppConversationRow(value: unknown): value is WhatsAppConversatio
       c.conversationKind === ("direct" satisfies WhatsAppConversationKind)) &&
     typeof c.displayName === "string" &&
     typeof c.lastMessageSummary === "string" &&
+    isReviewMessageExcerpt(c.reviewMessageExcerpt) &&
     (c.timeline === undefined ||
       (Array.isArray(c.timeline) && c.timeline.length <= 20 && c.timeline.every(isWhatsAppTimelineEntry)))
+  );
+}
+
+function isReviewMessageExcerpt(value: unknown): boolean {
+  if (value === undefined) return true;
+  if (typeof value !== "object" || value === null) return false;
+  const r = value as Record<string, unknown>;
+  return (
+    typeof r.author === "string" &&
+    typeof r.body === "string" &&
+    typeof r.sentLabel === "string" &&
+    (r.direction === "inbound" || r.direction === "outbound")
   );
 }
 
@@ -185,7 +198,8 @@ function isWhatsAppFollowUpRow(value: unknown): value is WhatsAppFollowUpRowV1 {
       f.state === ("resolved" satisfies WhatsAppFollowUpState) ||
       f.state === ("suppressed" satisfies WhatsAppFollowUpState)) &&
     typeof f.title === "string" &&
-    (f.contextSummary === undefined || typeof f.contextSummary === "string")
+    (f.contextSummary === undefined || typeof f.contextSummary === "string") &&
+    isReviewMessageExcerpt(f.reviewMessageExcerpt)
   );
 }
 

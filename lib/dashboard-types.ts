@@ -222,6 +222,7 @@ export interface WhatsAppConversationItem {
     | "uncertain_needs_review";
   historySummary?: string;
   timeline: WhatsAppMessageTimelineEntry[];
+  reviewMessageExcerpt?: ReviewMessageExcerpt;
 }
 
 export interface WhatsAppConversationRowV1 {
@@ -236,6 +237,7 @@ export interface WhatsAppConversationRowV1 {
   listNotes?: string[];
   historySummary?: string;
   timeline?: WhatsAppConversationHistoryEntryV1[];
+  reviewMessageExcerpt?: ReviewMessageExcerpt;
 }
 
 export interface WhatsAppFollowUpItem {
@@ -251,6 +253,7 @@ export interface WhatsAppFollowUpItem {
   relativeDueLabel?: string;
   dueRelativeLabel?: string;
   contextSummary: string;
+  reviewMessageExcerpt?: ReviewMessageExcerpt;
 }
 
 export interface WhatsAppFollowUpRowV1 {
@@ -267,6 +270,7 @@ export interface WhatsAppFollowUpRowV1 {
   topicSummary?: string;
   contextSummary?: string;
   confidenceLabel?: "low" | "medium" | "high";
+  reviewMessageExcerpt?: ReviewMessageExcerpt;
 }
 
 export interface WhatsAppDashboardSummaryV1 {
