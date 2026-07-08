@@ -32,7 +32,7 @@ export default function EmailsInboxPage({
   dataMode,
 }: EmailsInboxPageProps) {
   const [query, setQuery] = useState("");
-  const [actionOnly, setActionOnly] = useState(false);
+  const [actionOnly, setActionOnly] = useState(true);
   const [sort, setSort] = useState<SortMode>("latest-received");
   const [selectedId, setSelectedId] = useState<string | null>(items[0]?.id ?? null);
 
@@ -78,7 +78,7 @@ export default function EmailsInboxPage({
   }, [actionOnly, items, query, sort]);
 
   const hasActiveFilters =
-    query.trim() !== "" || actionOnly || sort !== "latest-received";
+    query.trim() !== "" || !actionOnly || sort !== "latest-received";
 
   const selectedItem = useMemo(() => {
     if (filtered.length === 0) return null;
@@ -87,7 +87,7 @@ export default function EmailsInboxPage({
 
   function clearFilters() {
     setQuery("");
-    setActionOnly(false);
+    setActionOnly(true);
     setSort("latest-received");
   }
 

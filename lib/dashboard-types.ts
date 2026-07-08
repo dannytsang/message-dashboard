@@ -179,7 +179,7 @@ export interface EmailDashboardSourceMetadataV1 {
 export type WhatsAppConversationKind = "group" | "direct";
 export type WhatsAppConversationListKey = "monitored" | "drafts";
 export type WhatsAppConversationSortMode = "latest-message" | "name-a-z";
-export type WhatsAppFollowUpSortMode = "due-soonest" | "name-a-z";
+export type WhatsAppFollowUpSortMode = "latest-message" | "due-soonest" | "name-a-z";
 export type WhatsAppFollowUpState =
   | "proposed"
   | "scheduled"
@@ -257,6 +257,7 @@ export interface WhatsAppFollowUpItem {
   state: WhatsAppFollowUpState;
   title: string;
   dueAt?: string;
+  lastMessageAt?: string;
   relativeDueLabel?: string;
   dueRelativeLabel?: string;
   contextSummary: string;

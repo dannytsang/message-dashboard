@@ -353,6 +353,7 @@ function isWhatsAppFollowUpRowV1(value: unknown): value is WhatsAppFollowUpRowV1
     typeof value.displayName === "string" &&
     isWhatsAppFollowUpState(value.state) &&
     typeof value.title === "string" &&
+    (value.lastMessageAt === undefined || typeof value.lastMessageAt === "string") &&
     (value.contextSummary === undefined || typeof value.contextSummary === "string") &&
     isReviewMessageExcerpt(value.reviewMessageExcerpt)
   );
@@ -461,6 +462,7 @@ function whatsAppFollowUpRowToUi(row: WhatsAppFollowUpRowV1): WhatsAppFollowUpIt
     state: row.state,
     title: row.title,
     dueAt: row.dueAt,
+    lastMessageAt: row.lastMessageAt,
     relativeDueLabel: row.dueRelativeLabel,
     dueRelativeLabel: row.dueRelativeLabel,
     contextSummary: row.contextSummary ?? row.topicSummary ?? row.lastMessageSummary ?? "",

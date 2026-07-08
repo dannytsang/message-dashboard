@@ -37,6 +37,7 @@ const conversationSortLabels: Record<WhatsAppConversationSortMode, string> = {
 };
 
 const followUpSortLabels: Record<WhatsAppFollowUpSortMode, string> = {
+  "latest-message": "Latest message",
   "due-soonest": "Due soonest",
   "name-a-z": "Name A–Z",
 };
@@ -164,6 +165,28 @@ function followUpUrgencyRank(state: WhatsAppFollowUpState) {
   }
 }
 
+function compareFollowUpsByLatestMessage(a: WhatsAppFollowUpItem, b: WhatsAppFollowUpItem) {
+  const ta = new Date(a.lastMessageAt ?? a.dueAt ?? 0).getTime();
+  const tb = new Date(b.lastMessageAt ?? b.dueAt ?? 0).getTime();
+  const aMissing = Number.isNaN(ta) || (a.lastMessageAt == null && a.dueAt == null);
+  const bMissing = Number.isNaN(tb) || (b.lastMessageAt == null && b.dueAt == null);
+
+  if (aMissing && bMissing) {
+    const stateRank = followUpUrgencyRank(a.state) - followUpUrgencyRank(b.state);
+    if (stateRank !== 0) return stateRank;
+    return a.displayName.localeCompare(b.displayName, "en", { sensitivity: "base" });
+  }
+
+  if (aMissing) return 1;
+  if (bMissing) return -1;
+  if (tb !== ta) return tb - ta;
+
+  const stateRank = followUpUrgencyRank(a.state) - followUpUrgencyRank(b.state);
+  if (stateRank !== 0) return stateRank;
+
+  return a.displayName.localeCompare(b.displayName, "en", { sensitivity: "base" });
+}
+
 function compareFollowUpsByDue(a: WhatsAppFollowUpItem, b: WhatsAppFollowUpItem) {
   const ta = new Date(a.dueAt ?? 0).getTime();
   const tb = new Date(b.dueAt ?? 0).getTime();
@@ -196,7 +219,9 @@ function compareFollowUpsByName(a: WhatsAppFollowUpItem, b: WhatsAppFollowUpItem
 }
 
 function sortFollowUps(items: WhatsAppFollowUpItem[], sort: WhatsAppFollowUpSortMode) {
-  return [...items].sort(sort === "name-a-z" ? compareFollowUpsByName : compareFollowUpsByDue);
+  if (sort === "name-a-z") return [...items].sort(compareFollowUpsByName);
+  if (sort === "due-soonest") return [...items].sort(compareFollowUpsByDue);
+  return [...items].sort(compareFollowUpsByLatestMessage);
 }
 
 function countLabel(count: number, singular: string, plural: string) {
@@ -269,9 +294,9 @@ export default function WhatsAppDashboardPage({
     useState<ConversationKindFilter>("all");
   const [draftsKindFilter, setDraftsKindFilter] = useState<ConversationKindFilter>("all");
   const [followUpSort, setFollowUpSort] =
-    useState<WhatsAppFollowUpSortMode>("due-soonest");
+    useState<WhatsAppFollowUpSortMode>("latest-message");
   const [followUpFilter, setFollowUpFilter] =
-    useState<FollowUpOperationalFilter>("all");
+    useState<FollowUpOperationalFilter>("action_required");
   const [selection, setSelection] = useState<{
     conversationId: string;
     origin: WhatsAppConversationListKey;
