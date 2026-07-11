@@ -140,6 +140,7 @@ function combineConversationItems(
       historySummary: item.historySummary ?? existing.historySummary,
       pendingDraftSnippet: item.pendingDraftSnippet ?? existing.pendingDraftSnippet,
       draftSummary: item.draftSummary ?? existing.draftSummary,
+      reviewMessageExcerpt: item.reviewMessageExcerpt ?? existing.reviewMessageExcerpt,
     });
   }
 
@@ -907,6 +908,25 @@ function HistoryPane({
               {formatDashboardRelativeDateTime(conversation.lastMessageAt) ?? "No relative timestamp"}
             </span>
           </div>
+          {conversation.reviewMessageExcerpt && (
+            <div className={styles.historyCard}>
+              <span className={styles.historyCardTitle}>Message this draft relates to</span>
+              <div className={styles.relatedMessageCard}>
+                <div className={styles.relatedMessageMeta}>
+                  <span className={styles.relatedMessageAuthor}>
+                    {conversation.reviewMessageExcerpt.author}
+                  </span>
+                  <span className={styles.timelineBadge}>
+                    {conversation.reviewMessageExcerpt.direction === "inbound" ? "Incoming" : "Outgoing"}
+                  </span>
+                  <span className={styles.timelineTime}>
+                    {conversation.reviewMessageExcerpt.sentLabel}
+                  </span>
+                </div>
+                <p className={styles.historyCardBody}>{conversation.reviewMessageExcerpt.body}</p>
+              </div>
+            </div>
+          )}
           {conversation.pendingDraftSnippet && (
             <div className={styles.historyCard}>
               <span className={styles.historyCardTitle}>Pending draft context</span>

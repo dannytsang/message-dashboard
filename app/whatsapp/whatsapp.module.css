@@ -592,6 +592,26 @@
   line-height: 1.6;
 }
 
+.relatedMessageCard {
+  border-left: 3px solid var(--color-accent);
+  padding-left: var(--space-sm);
+  display: grid;
+  gap: 6px;
+}
+
+.relatedMessageMeta {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.relatedMessageAuthor {
+  color: var(--color-text-primary);
+  font-size: 0.8125rem;
+  font-weight: 700;
+}
+
 .timelineList {
   list-style: none;
   display: grid;
